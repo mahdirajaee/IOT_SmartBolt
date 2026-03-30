@@ -1,0 +1,211 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1100 720" font-family="Segoe UI, Arial, sans-serif">
+  <defs>
+    <linearGradient id="bgGrad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#0f172a"/>
+      <stop offset="100%" stop-color="#1e293b"/>
+    </linearGradient>
+    <linearGradient id="northGrad" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#1e3a5f"/>
+      <stop offset="100%" stop-color="#1a2e4a"/>
+    </linearGradient>
+    <linearGradient id="southGrad" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#3b1f4a"/>
+      <stop offset="100%" stop-color="#2d1a3a"/>
+    </linearGradient>
+    <linearGradient id="serviceGrad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#0d3b66"/>
+      <stop offset="100%" stop-color="#0a2a4a"/>
+    </linearGradient>
+    <filter id="shadow">
+      <feDropShadow dx="0" dy="2" stdDeviation="3" flood-opacity="0.3"/>
+    </filter>
+    <marker id="arrowBlue" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+      <path d="M0,0 L8,3 L0,6" fill="#38bdf8" opacity="0.7"/>
+    </marker>
+    <marker id="arrowGreen" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+      <path d="M0,0 L8,3 L0,6" fill="#4ade80" opacity="0.7"/>
+    </marker>
+    <marker id="arrowOrange" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+      <path d="M0,0 L8,3 L0,6" fill="#fb923c" opacity="0.7"/>
+    </marker>
+    <marker id="arrowRed" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+      <path d="M0,0 L8,3 L0,6" fill="#f87171" opacity="0.7"/>
+    </marker>
+  </defs>
+
+  <!-- Background -->
+  <rect width="1100" height="720" rx="12" fill="url(#bgGrad)"/>
+
+  <!-- Title -->
+  <text x="550" y="38" text-anchor="middle" fill="#e2e8f0" font-size="20" font-weight="600">IoT Pipeline Monitoring System — Overview</text>
+
+  <!-- ==================== NORTH SECTOR ==================== -->
+  <rect x="30" y="60" width="340" height="290" rx="10" fill="url(#northGrad)" stroke="#38bdf8" stroke-width="1" opacity="0.9" filter="url(#shadow)"/>
+  <text x="200" y="88" text-anchor="middle" fill="#38bdf8" font-size="14" font-weight="600">NORTH SECTOR</text>
+  <text x="200" y="105" text-anchor="middle" fill="#94a3b8" font-size="11">Raspberry Pi North (Simulator)</text>
+
+  <!-- Pipeline N1 -->
+  <rect x="50" y="118" width="300" height="65" rx="6" fill="#0f2033" stroke="#334155" stroke-width="0.5"/>
+  <text x="68" y="137" fill="#38bdf8" font-size="12" font-weight="600">Pipeline N1</text>
+  <circle cx="80" cy="157" r="8" fill="#1e3a5f" stroke="#38bdf8" stroke-width="1.5"/>
+  <text x="80" y="161" text-anchor="middle" fill="#38bdf8" font-size="8" font-weight="700">B</text>
+  <text x="95" y="161" fill="#cbd5e1" font-size="10">Bolt: Temp + Pressure</text>
+  <rect x="250" y="148" width="42" height="18" rx="4" fill="#1e3a5f" stroke="#4ade80" stroke-width="1"/>
+  <text x="271" y="161" text-anchor="middle" fill="#4ade80" font-size="9">Valve</text>
+  <!-- Pipe line visual -->
+  <line x1="95" y1="157" x2="248" y2="157" stroke="#475569" stroke-width="2" stroke-dasharray="4,3"/>
+
+  <!-- Pipeline N2 -->
+  <rect x="50" y="190" width="300" height="65" rx="6" fill="#0f2033" stroke="#334155" stroke-width="0.5"/>
+  <text x="68" y="209" fill="#38bdf8" font-size="12" font-weight="600">Pipeline N2</text>
+  <circle cx="80" cy="229" r="8" fill="#1e3a5f" stroke="#38bdf8" stroke-width="1.5"/>
+  <text x="80" y="233" text-anchor="middle" fill="#38bdf8" font-size="8" font-weight="700">B</text>
+  <text x="95" y="233" fill="#cbd5e1" font-size="10">Bolt: Temp + Pressure</text>
+  <rect x="250" y="220" width="42" height="18" rx="4" fill="#1e3a5f" stroke="#4ade80" stroke-width="1"/>
+  <text x="271" y="233" text-anchor="middle" fill="#4ade80" font-size="9">Valve</text>
+  <line x1="95" y1="229" x2="248" y2="229" stroke="#475569" stroke-width="2" stroke-dasharray="4,3"/>
+
+  <!-- Pipeline N3 -->
+  <rect x="50" y="262" width="300" height="65" rx="6" fill="#0f2033" stroke="#334155" stroke-width="0.5"/>
+  <text x="68" y="281" fill="#38bdf8" font-size="12" font-weight="600">Pipeline N3</text>
+  <circle cx="80" cy="301" r="8" fill="#1e3a5f" stroke="#38bdf8" stroke-width="1.5"/>
+  <text x="80" y="305" text-anchor="middle" fill="#38bdf8" font-size="8" font-weight="700">B</text>
+  <text x="95" y="305" fill="#cbd5e1" font-size="10">Bolt: Temp + Pressure</text>
+  <rect x="250" y="292" width="42" height="18" rx="4" fill="#1e3a5f" stroke="#4ade80" stroke-width="1"/>
+  <text x="271" y="305" text-anchor="middle" fill="#4ade80" font-size="9">Valve</text>
+  <line x1="95" y1="301" x2="248" y2="301" stroke="#475569" stroke-width="2" stroke-dasharray="4,3"/>
+
+  <!-- ==================== SOUTH SECTOR ==================== -->
+  <rect x="30" y="370" width="340" height="290" rx="10" fill="url(#southGrad)" stroke="#c084fc" stroke-width="1" opacity="0.9" filter="url(#shadow)"/>
+  <text x="200" y="398" text-anchor="middle" fill="#c084fc" font-size="14" font-weight="600">SOUTH SECTOR</text>
+  <text x="200" y="415" text-anchor="middle" fill="#94a3b8" font-size="11">Raspberry Pi South (Simulator)</text>
+
+  <!-- Pipeline S1 -->
+  <rect x="50" y="428" width="300" height="65" rx="6" fill="#1a0f2e" stroke="#334155" stroke-width="0.5"/>
+  <text x="68" y="447" fill="#c084fc" font-size="12" font-weight="600">Pipeline S1</text>
+  <circle cx="80" cy="467" r="8" fill="#2d1a3a" stroke="#c084fc" stroke-width="1.5"/>
+  <text x="80" y="471" text-anchor="middle" fill="#c084fc" font-size="8" font-weight="700">B</text>
+  <text x="95" y="471" fill="#cbd5e1" font-size="10">Bolt: Temp + Pressure</text>
+  <rect x="250" y="458" width="42" height="18" rx="4" fill="#2d1a3a" stroke="#4ade80" stroke-width="1"/>
+  <text x="271" y="471" text-anchor="middle" fill="#4ade80" font-size="9">Valve</text>
+  <line x1="95" y1="467" x2="248" y2="467" stroke="#475569" stroke-width="2" stroke-dasharray="4,3"/>
+
+  <!-- Pipeline S2 -->
+  <rect x="50" y="500" width="300" height="65" rx="6" fill="#1a0f2e" stroke="#334155" stroke-width="0.5"/>
+  <text x="68" y="519" fill="#c084fc" font-size="12" font-weight="600">Pipeline S2</text>
+  <circle cx="80" cy="539" r="8" fill="#2d1a3a" stroke="#c084fc" stroke-width="1.5"/>
+  <text x="80" y="543" text-anchor="middle" fill="#c084fc" font-size="8" font-weight="700">B</text>
+  <text x="95" y="543" fill="#cbd5e1" font-size="10">Bolt: Temp + Pressure</text>
+  <rect x="250" y="530" width="42" height="18" rx="4" fill="#2d1a3a" stroke="#4ade80" stroke-width="1"/>
+  <text x="271" y="543" text-anchor="middle" fill="#4ade80" font-size="9">Valve</text>
+  <line x1="95" y1="539" x2="248" y2="539" stroke="#475569" stroke-width="2" stroke-dasharray="4,3"/>
+
+  <!-- Pipeline S3 -->
+  <rect x="50" y="572" width="300" height="65" rx="6" fill="#1a0f2e" stroke="#334155" stroke-width="0.5"/>
+  <text x="68" y="591" fill="#c084fc" font-size="12" font-weight="600">Pipeline S3</text>
+  <circle cx="80" cy="611" r="8" fill="#2d1a3a" stroke="#c084fc" stroke-width="1.5"/>
+  <text x="80" y="615" text-anchor="middle" fill="#c084fc" font-size="8" font-weight="700">B</text>
+  <text x="95" y="615" fill="#cbd5e1" font-size="10">Bolt: Temp + Pressure</text>
+  <rect x="250" y="602" width="42" height="18" rx="4" fill="#2d1a3a" stroke="#4ade80" stroke-width="1"/>
+  <text x="271" y="615" text-anchor="middle" fill="#4ade80" font-size="9">Valve</text>
+  <line x1="95" y1="611" x2="248" y2="611" stroke="#475569" stroke-width="2" stroke-dasharray="4,3"/>
+
+  <!-- ==================== MQTT BROKER ==================== -->
+  <rect x="440" y="270" width="160" height="70" rx="10" fill="#0c4a6e" stroke="#38bdf8" stroke-width="1.5" filter="url(#shadow)"/>
+  <text x="520" y="298" text-anchor="middle" fill="#e2e8f0" font-size="14" font-weight="600">MQTT Broker</text>
+  <text x="520" y="316" text-anchor="middle" fill="#7dd3fc" font-size="11">Mosquitto</text>
+  <text x="520" y="332" text-anchor="middle" fill="#94a3b8" font-size="9">Publish / Subscribe</text>
+
+  <!-- ==================== ARROWS: Sectors → MQTT ==================== -->
+  <!-- North → MQTT -->
+  <path d="M370,200 Q410,200 440,290" fill="none" stroke="#38bdf8" stroke-width="1.5" marker-end="url(#arrowBlue)" opacity="0.6"/>
+  <text x="395" y="235" fill="#38bdf8" font-size="9" transform="rotate(-30,395,235)">sensor data</text>
+
+  <!-- South → MQTT -->
+  <path d="M370,510 Q410,510 440,320" fill="none" stroke="#c084fc" stroke-width="1.5" marker-end="url(#arrowBlue)" opacity="0.6"/>
+  <text x="395" y="440" fill="#c084fc" font-size="9" transform="rotate(30,395,440)">sensor data</text>
+
+  <!-- ==================== SERVICES ==================== -->
+
+  <!-- Resource Catalog -->
+  <rect x="440" y="80" width="160" height="55" rx="8" fill="url(#serviceGrad)" stroke="#475569" stroke-width="1" filter="url(#shadow)"/>
+  <text x="520" y="104" text-anchor="middle" fill="#e2e8f0" font-size="12" font-weight="600">Resource Catalog</text>
+  <text x="520" y="122" text-anchor="middle" fill="#94a3b8" font-size="10">Service Registry</text>
+
+  <!-- TimeSeries DB -->
+  <rect x="670" y="120" width="160" height="55" rx="8" fill="url(#serviceGrad)" stroke="#475569" stroke-width="1" filter="url(#shadow)"/>
+  <text x="750" y="144" text-anchor="middle" fill="#e2e8f0" font-size="12" font-weight="600">TimeSeries DB</text>
+  <text x="750" y="162" text-anchor="middle" fill="#94a3b8" font-size="10">InfluxDB Storage</text>
+
+  <!-- Analytics -->
+  <rect x="670" y="230" width="160" height="55" rx="8" fill="url(#serviceGrad)" stroke="#fb923c" stroke-width="1" filter="url(#shadow)"/>
+  <text x="750" y="254" text-anchor="middle" fill="#e2e8f0" font-size="12" font-weight="600">Analytics</text>
+  <text x="750" y="272" text-anchor="middle" fill="#94a3b8" font-size="10">Anomaly Detection</text>
+
+  <!-- Control Center -->
+  <rect x="670" y="340" width="160" height="55" rx="8" fill="url(#serviceGrad)" stroke="#f87171" stroke-width="1" filter="url(#shadow)"/>
+  <text x="750" y="364" text-anchor="middle" fill="#e2e8f0" font-size="12" font-weight="600">Control Center</text>
+  <text x="750" y="382" text-anchor="middle" fill="#94a3b8" font-size="10">Decision Engine</text>
+
+  <!-- Account Manager -->
+  <rect x="670" y="450" width="160" height="55" rx="8" fill="url(#serviceGrad)" stroke="#475569" stroke-width="1" filter="url(#shadow)"/>
+  <text x="750" y="474" text-anchor="middle" fill="#e2e8f0" font-size="12" font-weight="600">Account Manager</text>
+  <text x="750" y="492" text-anchor="middle" fill="#94a3b8" font-size="10">Authentication</text>
+
+  <!-- ==================== USER INTERFACES ==================== -->
+
+  <!-- Web Dashboard -->
+  <rect x="910" y="210" width="160" height="55" rx="8" fill="#1a3a2a" stroke="#4ade80" stroke-width="1" filter="url(#shadow)"/>
+  <text x="990" y="234" text-anchor="middle" fill="#e2e8f0" font-size="12" font-weight="600">Web Dashboard</text>
+  <text x="990" y="252" text-anchor="middle" fill="#94a3b8" font-size="10">Monitoring UI</text>
+
+  <!-- Telegram Bot -->
+  <rect x="910" y="320" width="160" height="55" rx="8" fill="#1a3a2a" stroke="#4ade80" stroke-width="1" filter="url(#shadow)"/>
+  <text x="990" y="344" text-anchor="middle" fill="#e2e8f0" font-size="12" font-weight="600">Telegram Bot</text>
+  <text x="990" y="362" text-anchor="middle" fill="#94a3b8" font-size="10">Alerts &amp; Commands</text>
+
+  <!-- ==================== ARROWS: MQTT → Services ==================== -->
+  <!-- MQTT → TimeSeries -->
+  <line x1="600" y1="285" x2="670" y2="155" stroke="#38bdf8" stroke-width="1.2" marker-end="url(#arrowBlue)" opacity="0.5"/>
+
+  <!-- MQTT → Analytics -->
+  <line x1="600" y1="300" x2="670" y2="260" stroke="#fb923c" stroke-width="1.2" marker-end="url(#arrowOrange)" opacity="0.5"/>
+
+  <!-- MQTT → Control Center (bidirectional) -->
+  <line x1="600" y1="315" x2="670" y2="365" stroke="#f87171" stroke-width="1.2" marker-end="url(#arrowRed)" opacity="0.5"/>
+
+  <!-- Control Center → MQTT (valve commands back) -->
+  <line x1="670" y1="375" x2="600" y2="325" stroke="#4ade80" stroke-width="1.2" marker-end="url(#arrowGreen)" opacity="0.4" stroke-dasharray="4,3"/>
+  <text x="620" y="362" fill="#4ade80" font-size="8">valve cmds</text>
+
+  <!-- ==================== ARROWS: Services → UI ==================== -->
+  <!-- Analytics → Dashboard -->
+  <line x1="830" y1="255" x2="910" y2="240" stroke="#4ade80" stroke-width="1.2" marker-end="url(#arrowGreen)" opacity="0.5"/>
+
+  <!-- Analytics → Telegram -->
+  <line x1="830" y1="265" x2="910" y2="340" stroke="#4ade80" stroke-width="1.2" marker-end="url(#arrowGreen)" opacity="0.5"/>
+
+  <!-- Control Center → Dashboard -->
+  <line x1="830" y1="360" x2="910" y2="245" stroke="#4ade80" stroke-width="1" marker-end="url(#arrowGreen)" opacity="0.4" stroke-dasharray="4,3"/>
+
+  <!-- MQTT → Telegram (alerts) -->
+  <path d="M560,340 Q560,400 910,350" fill="none" stroke="#fb923c" stroke-width="1" marker-end="url(#arrowOrange)" opacity="0.4"/>
+  <text x="700" y="400" fill="#fb923c" font-size="8">alerts</text>
+
+  <!-- ==================== LEGEND ==================== -->
+  <rect x="440" y="570" width="340" height="90" rx="8" fill="#0f172a" stroke="#334155" stroke-width="0.5"/>
+  <text x="460" y="593" fill="#94a3b8" font-size="11" font-weight="600">Legend</text>
+
+  <circle cx="470" cy="612" r="6" fill="#1e3a5f" stroke="#38bdf8" stroke-width="1.5"/>
+  <text x="470" y="616" text-anchor="middle" fill="#38bdf8" font-size="7" font-weight="700">B</text>
+  <text x="485" y="616" fill="#cbd5e1" font-size="10">Bolt (Temperature + Pressure Sensor)</text>
+
+  <rect x="460" y="628" width="20" height="12" rx="3" fill="#1e3a5f" stroke="#4ade80" stroke-width="1"/>
+  <text x="485" y="639" fill="#cbd5e1" font-size="10">Valve (Flow Control Actuator)</text>
+
+  <line x1="460" y1="650" x2="480" y2="650" stroke="#475569" stroke-width="2" stroke-dasharray="4,3"/>
+  <text x="485" y="654" fill="#cbd5e1" font-size="10">Pipeline Segment</text>
+
+  <!-- ==================== LABEL: Data Flow ==================== -->
+  <text x="550" y="695" text-anchor="middle" fill="#64748b" font-size="11">Sensors → MQTT Broker → Analytics &amp; Storage → Dashboard &amp; Telegram → Valve Commands</text>
+</svg>
