@@ -47,7 +47,8 @@ class BrokerMonitor:
             self.mqtt.start()
             time.sleep(1)
             self.connected = True
-
+            
+#check kon wildcard
             self.mqtt.mySubscribe("sectors/+/pipelines/+/measurements")
             self.mqtt.mySubscribe("sectors/+/pipelines/+/alerts/+")
             self.mqtt.mySubscribe("sectors/+/pipelines/+/commands/valves")
@@ -73,7 +74,7 @@ class BrokerMonitor:
             "connected": self.connected
         }
 
-
+#ghablesh mosquitto run bashe roo system
 class MosquittoManager:
     def __init__(self):
         self.system = platform.system()
@@ -139,6 +140,7 @@ class MosquittoManager:
 class MessageBrokerWebService(object):
     exposed = True
 
+#port age eshghal bud avaz she
     def __init__(self):
         self.mosquitto = MosquittoManager()
         self.broker_host = os.getenv("MQTT_BROKER", "localhost")
