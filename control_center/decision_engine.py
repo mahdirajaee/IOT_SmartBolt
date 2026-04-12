@@ -65,7 +65,7 @@ class DecisionEngine:
         logger.info("Decision Engine shut down")
     
     def make_decision(self, pipeline_id: str, bolt_id: str) -> Optional[DecisionResult]:
-        # TODO: what if analytics is down?
+        
         try:
             insight = self.analytics_client.get_comprehensive_insight(pipeline_id, bolt_id)
             

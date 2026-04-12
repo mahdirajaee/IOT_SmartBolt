@@ -20,6 +20,7 @@ class AnalyticsInsight:
 class AnalyticsClient:
     def __init__(self, analytics_url: str = "http://localhost:8083"):
         self.analytics_url = analytics_url
+        # ino 60 konim behtre, vase mohammad be moshkel bar mikhore
         self.timeout = int(os.getenv("ANALYTICS_CLIENT_TIMEOUT", 10))
         self.cache = {}
         self.cache_ttl = int(os.getenv("ANALYTICS_CACHE_TTL", 60))
