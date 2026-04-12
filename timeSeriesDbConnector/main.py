@@ -10,13 +10,13 @@ from typing import Any
 
 from mqtt_subscriber import MQTTSubscriber
 from influxdb3_storage import InfluxDB3Storage
-from data_models import AggregationType
 
 #certificate handling for gRPC on Windows
 # Force gRPC to use the Windows CA bundle that worked with curl.exe
 os.environ["GRPC_DEFAULT_SSL_ROOTS_FILE_PATH"] = r"C:\certs\cacert.pem"
 print(f"[DEBUG] Using CA bundle: {os.environ['GRPC_DEFAULT_SSL_ROOTS_FILE_PATH']}")
 #--------------------------------------------
+
 
 load_dotenv()
 load_dotenv(Path(__file__).resolve().with_name(".env"))
@@ -77,29 +77,18 @@ class TimeSeriesDBService(object):
     
     def _register_with_catalog(self):
         try:
-            import requests
-            
+            from common_utils import CatalogClient
             catalog_url = os.getenv("CATALOG_URL", "http://localhost:8081")
-            
-            payload = {
-                "name": "timeseries_db",
-                "host": os.getenv("SERVICE_HOST", "localhost"),
-                "port": int(os.getenv("CHERRYPY_PORT", 8082)),
-                "health_endpoint": "/health",
-                "description": "Time series database connector for IoT data"
-            }
-            
-            response = requests.post(
-                f"{catalog_url}/services/register",
-                json=payload,
-                timeout=5
-            )
-            
-            if response.status_code == 200:
+            client = CatalogClient(catalog_url)
+            if client.register_service(
+                name="timeseries_db",
+                host=os.getenv("SERVICE_HOST", "localhost"),
+                port=int(os.getenv("CHERRYPY_PORT", 8082)),
+                description="Time series database connector for IoT data"
+            ):
                 logger.info("Registered with Resource Catalog")
             else:
-                logger.warning(f"Could not register with Resource Catalog: {response.status_code}")
-                
+                logger.warning("Could not register with Resource Catalog")
         except Exception as e:
             logger.warning(f"Resource Catalog not available: {e}")
 
@@ -107,7 +96,7 @@ class TimeSeriesDBService(object):
         try:
             import requests
             catalog_url = os.getenv("CATALOG_URL", "http://localhost:8081")
-            response = requests.get(f"{catalog_url}/devices/pipelines", timeout=5)
+            response = requests.get(f"{catalog_url}/pipelines", timeout=5)
             if response.status_code == 200:
                 data = response.json()
                 pipelines = data.get("pipelines", {})
@@ -123,7 +112,7 @@ class TimeSeriesDBService(object):
             return
 
         try:
-            if data_type == "sensor" or data_type == "temperature" or data_type == "pressure":
+            if data_type == "sensor":
                 self.storage.store_sensor_reading(data)
             elif data_type == "valve":
                 self.storage.store_valve_status(data)
@@ -149,10 +138,6 @@ class TimeSeriesDBService(object):
                             "temperature": "/temperature?pipeline_id={pipeline_id}&bolt_id={bolt_id}&limit={limit}",
                             "pressure": "/pressure?pipeline_id={pipeline_id}&bolt_id={bolt_id}&limit={limit}",
                             "alerts": "/alerts?pipeline_id={pipeline_id}&severity={severity}&hours={hours}"
-                        },
-                        "analytics": {
-                            "statistics": "/statistics?pipeline_id={pipeline_id}&bolt_id={bolt_id}&sensor={sensor}&hours={hours}",
-                            "aggregated": "/aggregated?measurement={measurement}&aggregation={mean|sum|min|max}&window={window}"
                         },
                         "monitoring": {
                             "health": "/health",
@@ -193,8 +178,12 @@ class TimeSeriesDBService(object):
 
                 pipeline_id = query.get("pipeline_id")
                 bolt_id = query.get("bolt_id")
-                limit = int(query.get("limit", 100))
-                hours = int(query.get("hours", 24))
+                try:
+                    limit = max(1, min(int(query.get("limit", 100)), 10000))
+                    hours = max(1, min(int(query.get("hours", 24)), 720))
+                except (ValueError, TypeError):
+                    cherrypy.response.status = 400
+                    return self.json_response({"error": "Invalid limit or hours parameter"})
 
                 start_time = datetime.now() - timedelta(hours=hours)
 
@@ -210,80 +199,6 @@ class TimeSeriesDBService(object):
                     "measurement": endpoint,
                     "pipeline_id": pipeline_id,
                     "bolt_id": bolt_id,
-                    "count": len(data),
-                    "data": data
-                })
-            
-            elif endpoint == "statistics":
-                if not self.storage:
-                    cherrypy.response.status = 503
-                    return self.json_response({"error": "Storage not available"})
-                
-                pipeline_id = query.get("pipeline_id")
-                bolt_id = query.get("bolt_id")
-                sensor = query.get("sensor", "temperature")
-                hours = int(query.get("hours", 24))
-                
-                if not all([pipeline_id, bolt_id]):
-                    cherrypy.response.status = 400
-                    return self.json_response({"error": "pipeline_id and bolt_id required"})
-                
-                stats = self.storage.query_statistics(
-                    measurement=sensor,
-                    pipeline_id=pipeline_id,
-                    bolt_id=bolt_id,
-                    hours=hours
-                )
-                
-                if stats:
-                    return self.json_response({
-                        "pipeline_id": pipeline_id,
-                        "bolt_id": bolt_id,
-                        "sensor": sensor,
-                        "hours": hours,
-                        "statistics": stats.to_dict()
-                    })
-                else:
-                    return self.json_response({
-                        "pipeline_id": pipeline_id,
-                        "bolt_id": bolt_id,
-                        "sensor": sensor,
-                        "hours": hours,
-                        "statistics": None,
-                        "message": "No data available"
-                    })
-            
-            elif endpoint == "aggregated":
-                if not self.storage:
-                    cherrypy.response.status = 503
-                    return self.json_response({"error": "Storage not available"})
-                
-                measurement = query.get("measurement", "temperature")
-                aggregation = query.get("aggregation", "mean")
-                window = query.get("window", "1h")
-                pipeline_id = query.get("pipeline_id")
-                hours = int(query.get("hours", 24))
-                
-                try:
-                    agg_type = AggregationType(aggregation.upper())
-                except:
-                    agg_type = AggregationType.MEAN
-                
-                start_time = datetime.now() - timedelta(hours=hours)
-                
-                data = self.storage.query_aggregated_data(
-                    measurement=measurement,
-                    aggregation=agg_type,
-                    window=window,
-                    pipeline_id=pipeline_id,
-                    start_time=start_time
-                )
-                
-                return self.json_response({
-                    "measurement": measurement,
-                    "aggregation": aggregation,
-                    "window": window,
-                    "pipeline_id": pipeline_id,
                     "count": len(data),
                     "data": data
                 })
@@ -316,8 +231,12 @@ class TimeSeriesDBService(object):
 
                 pipeline_id = query.get("pipeline_id")
                 severity = query.get("severity")
-                hours = int(query.get("hours", 24))
-                limit = int(query.get("limit", 100))
+                try:
+                    hours = max(1, min(int(query.get("hours", 24)), 720))
+                    limit = max(1, min(int(query.get("limit", 100)), 10000))
+                except (ValueError, TypeError):
+                    cherrypy.response.status = 400
+                    return self.json_response({"error": "Invalid limit or hours parameter"})
 
                 alerts = self.storage.query_alerts(
                     pipeline_id=pipeline_id,
@@ -398,6 +317,7 @@ def main():
     logger.info(f"Starting TimeSeriesDB Connector v2.0 on {host}:{port}")
     logger.info("Features: MQTT subscription, InfluxDB storage, REST API")
     
+    cherrypy.engine.subscribe('stop', service.shutdown)
     cherrypy.quickstart(service, '/', app_config)
 
 if __name__ == "__main__":

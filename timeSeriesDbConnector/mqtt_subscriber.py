@@ -20,7 +20,7 @@ class MQTTSubscriber:
         self.port = port
         self.client_id = "timeseries-db-subscriber"
 
-        self.mqtt = MyMQTT(self.client_id, self.broker, self.port, self)
+        self.mqtt = MyMQTT(self.client_id, self.broker, self.port, self, clean_session=False)
 
         self.connected = False
         self.storage_callback = None
@@ -58,6 +58,8 @@ class MQTTSubscriber:
             self._handle_sensor_data(data)
         elif "/alerts/" in topic:
             self._handle_anomaly_data(data)
+        else:
+            logger.debug(f"Unrecognized topic pattern: {topic}")
 
     def _parse_senml(self, data):
         bn = data.get("bn", "")
@@ -65,6 +67,8 @@ class MQTTSubscriber:
         entries = data.get("e", [])
 
         parts = bn.strip("/").split("/")
+        if len(parts) < 4:
+            logger.warning(f"Unexpected SenML bn format (expected sectors/X/pipelines/Y): '{bn}'")
         sector_id = parts[1] if len(parts) >= 2 else "sector-unknown"
         pipeline_id = parts[3] if len(parts) >= 4 else "unknown"
 
@@ -143,10 +147,10 @@ class MQTTSubscriber:
         try:
             self.mqtt.start()
             time.sleep(1)
-            self.connected = True
 
             self.mqtt.mySubscribe("sectors/+/pipelines/+/measurements")
             self.mqtt.mySubscribe("sectors/+/pipelines/+/alerts/+")
+            self.connected = True
 
             logger.info("MQTT Subscriber started - subscribed directly to RPi topics")
             return True

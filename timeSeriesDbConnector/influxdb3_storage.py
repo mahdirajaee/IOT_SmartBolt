@@ -5,10 +5,7 @@ from datetime import datetime, timedelta
 from influxdb_client_3 import InfluxDBClient3, Point, WritePrecision, WriteOptions
 from urllib.parse import urlparse
 
-from data_models import (
-    SensorReading, ValveStatus, AnomalyEvent,
-    Statistics, AggregationType
-)
+from data_models import SensorReading, ValveStatus, AnomalyEvent
 
 logger = logging.getLogger(__name__)
 
@@ -20,6 +17,17 @@ class InfluxDB3Storage:
     # influxdb v3 storage - north and south buckets
     # WriteOptions handles batching internally so no manual buffer needed
 
+    _SAFE_ID_CHARS = set('abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-')
+
+    @staticmethod
+    def _validate_identifier(value):
+        if value is None:
+            return None
+        val = str(value)
+        if not all(c in InfluxDB3Storage._SAFE_ID_CHARS for c in val):
+            raise ValueError(f"Invalid identifier: {val}")
+        return val
+
     def __init__(self, url, bucket_north, bucket_south, token=None, org=None):
         cleaned_url = url.strip() or "http://localhost:8086"
         parsed_url = urlparse(cleaned_url)
@@ -30,7 +38,6 @@ class InfluxDB3Storage:
         self.bucket_south = bucket_south
         self.token = token
         self.org = org
-
         self.flight_options = {"disable_server_verification": True} if cleaned_url.startswith("http://") else None
 
         self.client_north = None
@@ -78,24 +85,21 @@ class InfluxDB3Storage:
     def _ensure_databases(self):
         for client, bucket in [(self.client_north, self.bucket_north), (self.client_south, self.bucket_south)]:
             try:
-                test_point = Point("test") \
-                    .field("value", 1) \
-                    .time(datetime.now(), WritePrecision.NS)
-                client.write(test_point)
+                client.query("SELECT 1")
                 logger.info(f"Bucket '{bucket}' is ready")
             except Exception as e:
-                logger.warning(f"Bucket '{bucket}' initialization: {e}")
+                logger.warning(f"Bucket '{bucket}' connectivity check: {e}")
 
     def _get_client_for_sector(self, sector_id):
         if sector_id == SECTOR_SOUTH:
             return self.client_south
         return self.client_north
 
-    def store_sensor_reading(self, reading: SensorReading): # reading is a dataclass with pipeline_id, bolt_id, timestamp, temperature, pressure, sector_id 
+    def store_sensor_reading(self, reading: SensorReading):
         try:
             points = []
-            timestamp = datetime.fromtimestamp(reading.timestamp) # how hndle the SECTOR_SOUTH?
-            sector_id = reading.sector_id or SECTOR_NORTH   
+            timestamp = datetime.fromtimestamp(reading.timestamp)
+            sector_id = reading.sector_id or SECTOR_NORTH
 
             if reading.temperature is not None:
                 temp_point = Point("temperature") \
@@ -178,8 +182,11 @@ class InfluxDB3Storage:
 
     def query_sensor_data(self, measurement, pipeline_id=None, bolt_id=None,
                          start_time=None, end_time=None, limit=100, sector_id=None):
-        # TODO: handle query timeouts better
         try:
+            measurement = self._validate_identifier(measurement)
+            pipeline_id = self._validate_identifier(pipeline_id)
+            bolt_id = self._validate_identifier(bolt_id)
+
             if not start_time:
                 start_time = datetime.now() - timedelta(hours=24)
             if not end_time:
@@ -232,142 +239,9 @@ class InfluxDB3Storage:
             return [self.client_south]
         return [self.client_north, self.client_south]
 
-    def query_statistics(self,
-                        measurement: str,
-                        pipeline_id: str,
-                        bolt_id: str,
-                        hours: int = 24,
-                        sector_id: Optional[str] = None) -> Optional[Statistics]:
-        try:
-            start_time = datetime.now() - timedelta(hours=hours)
-
-            query = f"""
-                SELECT
-                    AVG(value) as mean_value,
-                    MIN(value) as min_value,
-                    MAX(value) as max_value,
-                    STDDEV(value) as stddev_value,
-                    COUNT(value) as count_value
-                FROM {measurement}
-                WHERE time >= '{start_time.isoformat()}Z'
-                AND pipeline_id = '{pipeline_id}'
-                AND bolt_id = '{bolt_id}'
-            """
-
-            last_query = f"""
-                SELECT time, value
-                FROM {measurement}
-                WHERE pipeline_id = '{pipeline_id}'
-                AND bolt_id = '{bolt_id}'
-                ORDER BY time DESC
-                LIMIT 1
-            """
-
-            clients = self._get_clients_for_query(sector_id)
-
-            stats_row = None
-            last_row = None
-
-            for client in clients:
-                try:
-                    result = client.query(query)
-                    if result:
-                        df = result.to_pandas()
-                        if not df.empty and df.iloc[0].get('count_value', 0) > 0:
-                            stats_row = df.iloc[0]
-                            break
-                except Exception:
-                    continue
-
-            for client in clients:
-                try:
-                    last_result = client.query(last_query)
-                    if last_result:
-                        df_last = last_result.to_pandas()
-                        if not df_last.empty:
-                            last_row = df_last.iloc[0]
-                            break
-                except Exception:
-                    continue
-
-            if stats_row is None or stats_row.get('count_value', 0) == 0:
-                return None
-
-            return Statistics(
-                mean=stats_row.get('mean_value', 0),
-                min=stats_row.get('min_value', 0),
-                max=stats_row.get('max_value', 0),
-                stddev=stats_row.get('stddev_value', 0),
-                count=stats_row.get('count_value', 0),
-                last_value=last_row['value'] if last_row is not None else 0,
-                last_timestamp=last_row['time'].timestamp() if last_row is not None and hasattr(last_row['time'], 'timestamp') else None
-            )
-
-        except Exception as e:
-            logger.error(f"Statistics query error: {e}")
-            return None
-
-    def query_aggregated_data(self, measurement, aggregation, window="1h",
-                             pipeline_id=None, start_time=None, sector_id=None):
-        # this query is slow sometimes
-        try:
-            if not start_time:
-                start_time = datetime.now() - timedelta(days=1)
-
-            fn_map = {
-                AggregationType.MEAN: "AVG",
-                AggregationType.MAX: "MAX",
-                AggregationType.MIN: "MIN",
-                AggregationType.COUNT: "COUNT",
-                AggregationType.STDDEV: "STDDEV",
-                AggregationType.LAST: "LAST",
-                AggregationType.FIRST: "FIRST"
-            }
-
-            fn = fn_map.get(aggregation, "AVG")
-            interval = window.replace('h', ' HOUR').replace('m', ' MINUTE').replace('s', ' SECOND')
-
-            query = f"""
-                SELECT
-                    DATE_BIN(INTERVAL '{interval}', time) as window_time,
-                    pipeline_id,
-                    bolt_id,
-                    {fn}(value) as agg_value
-                FROM {measurement}
-                WHERE time >= '{start_time.isoformat()}Z'
-            """
-
-            if pipeline_id:
-                query += f" AND pipeline_id = '{pipeline_id}'"
-
-            query += " GROUP BY window_time, pipeline_id, bolt_id ORDER BY window_time"
-
-            clients = self._get_clients_for_query(sector_id)
-
-            data = []
-            for client in clients:
-                try:
-                    result = client.query(query)
-                    if result:
-                        df = result.to_pandas()
-                        for _, row in df.iterrows():
-                            data.append({
-                                "time": row['window_time'].timestamp() if hasattr(row.get('window_time'), 'timestamp') else row.get('window_time'),
-                                "value": row.get('agg_value'),
-                                "pipeline_id": row.get('pipeline_id'),
-                                "bolt_id": row.get('bolt_id')
-                            })
-                except Exception as e:
-                    logger.error(f"Aggregation query error on bucket: {e}")
-
-            return data
-
-        except Exception as e:
-            logger.error(f"Aggregation query error: {e}")
-            return []
-
     def get_pipeline_summary(self, pipeline_id, sector_id=None):
         try:
+            pipeline_id = self._validate_identifier(pipeline_id)
             hours = 24
             start_time = datetime.now() - timedelta(hours=hours)
 
@@ -417,7 +291,7 @@ class InfluxDB3Storage:
                 "pipeline_id": pipeline_id,
                 "total_bolts": len(bolt_ids),
                 "active_bolts": len(bolt_ids),
-                "anomaly_count": anomaly_count,
+                "anomaly_count": int(anomaly_count),
                 "time_range_hours": hours
             }
 
@@ -428,6 +302,8 @@ class InfluxDB3Storage:
     def query_alerts(self, pipeline_id=None, severity=None, hours=24,
                     limit=100, sector_id=None):
         try:
+            pipeline_id = self._validate_identifier(pipeline_id)
+            severity = self._validate_identifier(severity)
             start_time = datetime.now() - timedelta(hours=hours)
 
             query = f"""
