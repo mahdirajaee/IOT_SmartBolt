@@ -23,6 +23,7 @@ class PipelineManager:
         self.last_sync_time = 0
         self.sync_thread = None
         self.sync_running = False
+        self.current_publish_interval = int(os.getenv("PUBLISH_INTERVAL", 5))
         self._load_configuration()
         self._start_catalog_sync()
         logger.info(f"PipelineManager initialized for sector: {self.sector_id}")
@@ -194,9 +195,22 @@ class PipelineManager:
                 time.sleep(10)  
 
     def sync_with_catalog(self):
-        # catalog sync breaks sometimes just retry
         try:
-            response = requests.get(f"{self.resource_catalog_url}/devices/pipelines", timeout=10)
+            cfg_resp = requests.get(
+                f"{self.resource_catalog_url}/config",
+                params={"section": "global"}, timeout=5
+            )
+            if cfg_resp.status_code == 200:
+                global_cfg = cfg_resp.json().get("global_config", {})
+                new_interval = global_cfg.get("publish_interval")
+                if new_interval and new_interval != self.current_publish_interval:
+                    self.current_publish_interval = new_interval
+                    logger.info(f"Updated publish interval from catalog: {new_interval}s")
+        except Exception as e:
+            logger.debug(f"Could not fetch config from catalog: {e}")
+
+        try:
+            response = requests.get(f"{self.resource_catalog_url}/pipelines", timeout=10)
             if response.status_code != 200:
                 logger.warning(f"Failed to fetch pipelines from catalog: {response.status_code}")
                 return False
@@ -219,7 +233,7 @@ class PipelineManager:
                     logger.info(f"Found new pipeline in catalog for {self.sector_id}: {pipeline_id}")
 
                     detail_response = requests.get(
-                        f"{self.resource_catalog_url}/devices/pipeline/{pipeline_id}",
+                        f"{self.resource_catalog_url}/pipelines/{pipeline_id}",
                         timeout=10
                     )
 
@@ -302,7 +316,7 @@ class PipelineManager:
     def update_catalog_bolt_status(self, bolt_id, temperature, pressure):
         try:
             response = requests.put(
-                f"{self.resource_catalog_url}/devices/bolt/{bolt_id}",
+                f"{self.resource_catalog_url}/bolts/{bolt_id}",
                 json={"temperature": temperature, "pressure": pressure},
                 timeout=5
             )
@@ -312,3 +326,17 @@ class PipelineManager:
                 logger.warning(f"Failed to update catalog for bolt {bolt_id}: {response.status_code}")
         except requests.exceptions.RequestException as e:
             logger.debug(f"Could not update catalog for bolt {bolt_id}: {e}")
+
+    def update_catalog_valve_status(self, valve_id, state):
+        try:
+            response = requests.put(
+                f"{self.resource_catalog_url}/valves/{valve_id}",
+                json={"state": state},
+                timeout=5
+            )
+            if response.status_code == 200:
+                logger.debug(f"Updated catalog status for valve {valve_id}")
+            else:
+                logger.warning(f"Failed to update catalog for valve {valve_id}: {response.status_code}")
+        except requests.exceptions.RequestException as e:
+            logger.debug(f"Could not update catalog for valve {valve_id}: {e}")

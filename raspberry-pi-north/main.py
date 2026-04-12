@@ -316,7 +316,7 @@ if __name__ == '__main__':
     catalog_url = os.getenv("CATALOG_URL", "http://localhost:8081")
     catalog_client = CatalogClient(catalog_url)
     catalog_client.register_service(
-        name="raspberry_pi",
+        name=os.getenv("REGISTRATION_NAME", "raspberry_pi_north"),
         host=service_host,
         port=service_port,
         health_endpoint="/health",

@@ -3,7 +3,7 @@ import time
 import logging
 import os
 import math
-from typing import Dict
+from typing import Dict, Any
 from dataclasses import dataclass
 
 logger = logging.getLogger(__name__)

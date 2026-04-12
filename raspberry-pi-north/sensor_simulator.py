@@ -24,7 +24,7 @@ class SensorSimulator:
         
         self.publish_interval = int(os.getenv("PUBLISH_INTERVAL", 5))
         self.resource_catalog_url = os.getenv("CATALOG_URL", "http://localhost:8081")
-        self.service_name = os.getenv("REGISTRATION_NAME", "raspberrypi")
+        self.service_name = os.getenv("REGISTRATION_NAME", "raspberry_pi_north")
         
         self.pipeline_manager = PipelineManager()
         self.mqtt_publisher = MQTTPublisher(
@@ -105,11 +105,11 @@ class SensorSimulator:
         logger.info("Sensor simulator shutdown complete")
     
     def _simulation_loop(self):
-        
         while self.running:
             try:
                 self._generate_and_publish_data()
-                time.sleep(self.publish_interval)
+                interval = self.pipeline_manager.current_publish_interval
+                time.sleep(interval)
             except Exception as e:
                 logger.error(f"Error in simulation loop: {e}")
                 time.sleep(1)
@@ -135,6 +135,10 @@ class SensorSimulator:
                         bolt_data.get("temperature"),
                         bolt_data.get("pressure")
                     )
+
+                for valve_id, valve_data in data.get("valve_status", {}).items():
+                    valve_state = valve_data.get("state") if isinstance(valve_data, dict) else valve_data
+                    self.pipeline_manager.update_catalog_valve_status(valve_id, valve_state)
             else:
                 self.stats["failed_publishes"] += 1
 
@@ -210,37 +214,19 @@ class SensorSimulator:
     
     def _register_in_catalog(self):
         try:
-            pipelines = list(self.pipeline_manager.get_all_pipelines().keys())
-            
-            data = {
-                "name": self.service_name,
-                "type": "sensor_simulator",
-                "pipelines": pipelines,
-                "status": "active",
-                "capabilities": [
-                    "sensor_simulation",
-                    "valve_control",
-                    "data_persistence"
-                ],
-                "mqtt_topics": {
-                    "publish": [f"sectors/{os.getenv('SECTOR_ID', 'sector-north')}/pipelines/+/measurements"],
-                    "subscribe": [f"sectors/{os.getenv('SECTOR_ID', 'sector-north')}/pipelines/+/commands/valves"]
-                },
-                "api_endpoint": f"http://localhost:{os.getenv('SERVICE_PORT', 8086)}"
-            }
-            
-            response = requests.post(
-                f"{self.resource_catalog_url}/services/register",
-                json=data,
-                timeout=5
-            )
-            
-            if response.status_code == 200:
+            from common_utils import CatalogClient
+            port = int(os.getenv('SERVICE_PORT', 8086))
+            client = CatalogClient(self.resource_catalog_url)
+            if client.register_service(
+                name=self.service_name,
+                host="localhost",
+                port=port,
+                description="Raspberry Pi North sensor simulator"
+            ):
                 logger.info("Successfully registered with resource catalog")
             else:
-                logger.warning(f"Resource catalog registration failed: {response.status_code}")
-                
-        except requests.exceptions.RequestException as e:
+                logger.warning("Resource catalog registration failed")
+        except Exception as e:
             logger.warning(f"Could not reach resource catalog: {e}")
         except Exception as e:
             logger.error(f"Error registering with catalog: {e}")
