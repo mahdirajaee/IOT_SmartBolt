@@ -4,7 +4,7 @@ import dash_bootstrap_components as dbc
 from datetime import datetime
 import logging
 import os
-from pages.pipelines import format_timestamp
+from components.layouts import format_timestamp
 
 logger = logging.getLogger(__name__)
 
@@ -517,6 +517,20 @@ def execute_valve_control(action_data, auth_token, service_client):
                 action_data['pipeline_id'], action_data['valve_id'], command, auth_token
             )
             return result.get('success', False)
+
+        elif action_type in ('open_all', 'close_all'):
+            command = 'open' if action_type == 'open_all' else 'close'
+            pipeline_id = action_data.get('pipeline_id')
+            pipeline = service_client.get_pipeline(pipeline_id)
+            if not pipeline:
+                return False
+            success = True
+            for valve in pipeline.get('valves', []):
+                vid = valve.get('valve_id') if isinstance(valve, dict) else valve
+                result = service_client.send_valve_command(pipeline_id, vid, command, auth_token)
+                if not result.get('success', False):
+                    success = False
+            return success
 
         elif action_type == 'emergency_shutdown':
             return service_client.activate_emergency(auth_token)

@@ -1,6 +1,6 @@
 import requests
 import os
-from typing import Dict, Optional
+from typing import Dict
 import logging
 
 logger = logging.getLogger(__name__)
@@ -75,32 +75,3 @@ class AuthManager:
             logger.error(f"Token verification error: {e}")
             return False
 
-    def get_user_info(self, token: str) -> Optional[Dict]:
-        try:
-            headers = {'Authorization': f'Bearer {token}'}
-            response = requests.get(
-                f"{self.account_manager_url}/validate",
-                headers=headers,
-                timeout=5
-            )
-            if response.status_code == 200:
-                data = response.json()
-                if data.get('valid') and 'user' in data:
-                    return data.get('user')
-            return None
-        except Exception as e:
-            logger.error(f"Get user info error: {e}")
-            return None
-
-    def logout(self, token: str) -> bool:
-        try:
-            response = requests.post(
-                f"{self.account_manager_url}/logout",
-                headers={'Authorization': f'Bearer {token}'},
-                timeout=5
-            )
-
-            return response.status_code == 200
-
-        except Exception:
-            return True

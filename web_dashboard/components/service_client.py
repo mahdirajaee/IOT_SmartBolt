@@ -30,7 +30,7 @@ class ServiceClient:
             return None
 
     def get_pipelines(self) -> List[Dict]:
-        response = self._make_request('GET', f"{self.resource_catalog_url}/devices/pipelines")
+        response = self._make_request('GET', f"{self.resource_catalog_url}/pipelines")
         if not response:
             return []
         pipelines_map = response.get('pipelines') or {}
@@ -57,7 +57,7 @@ class ServiceClient:
         return [p for p in all_pipelines if p.get('location', {}).get('sector') == sector_id]
 
     def get_pipeline(self, pipeline_id: str) -> Optional[Dict]:
-        response = self._make_request('GET', f"{self.resource_catalog_url}/devices/pipeline/{pipeline_id}")
+        response = self._make_request('GET', f"{self.resource_catalog_url}/pipelines/{pipeline_id}")
         if not response:
             return None
         pipeline = response.get('pipeline') or {}
@@ -94,12 +94,12 @@ class ServiceClient:
         services = response.get('services') or {}
         return list(services.values())
 
-    def get_temperature_data(self, pipeline_id: str = None, hours: int = 24) -> List[Dict]:
+    def get_sensor_data(self, sensor_type: str, pipeline_id: str = None, hours: int = 24) -> List[Dict]:
         params = {'hours': hours}
         if pipeline_id:
             params['pipeline_id'] = pipeline_id
 
-        response = self._make_request('GET', f"{self.timeseries_url}/temperature", params=params)
+        response = self._make_request('GET', f"{self.timeseries_url}/{sensor_type}", params=params)
         if not response:
             return []
         raw = response.get('data', [])
@@ -110,7 +110,7 @@ class ServiceClient:
                 timestamp = datetime.fromtimestamp(ts).isoformat()
             else:
                 timestamp = ts
-            value = item.get('temperature', item.get('value'))
+            value = item.get(sensor_type, item.get('value'))
             result.append({
                 'timestamp': timestamp,
                 'value': value,
@@ -119,65 +119,37 @@ class ServiceClient:
             })
         return result
 
-    def get_pressure_data(self, pipeline_id: str = None, hours: int = 24) -> List[Dict]:
-        params = {'hours': hours}
-        if pipeline_id:
-            params['pipeline_id'] = pipeline_id
-
-        response = self._make_request('GET', f"{self.timeseries_url}/pressure", params=params)
-        if not response:
-            return []
-        raw = response.get('data', [])
-        result = []
-        for item in raw:
-            ts = item.get('timestamp') or item.get('time')
-            if isinstance(ts, (int, float)):
-                timestamp = datetime.fromtimestamp(ts).isoformat()
-            else:
-                timestamp = ts
-            value = item.get('pressure', item.get('value'))
-            result.append({
-                'timestamp': timestamp,
-                'value': value,
-                'bolt_id': item.get('bolt_id'),
-                'pipeline_id': item.get('pipeline_id')
-            })
-        return result
-
-    def get_statistics(self) -> Dict:
+    def get_statistics(self, pipeline_id: Optional[str] = None, bolt_id: Optional[str] = None) -> Dict:
         try:
-            temp_response = self._make_request('GET', f"{self.timeseries_url}/statistics",
-                                               params={'pipeline_id': 'N1', 'bolt_id': 'bolt_n1', 'sensor': 'temperature', 'hours': 24})
+            result = {'temperature': {}, 'pressure': {}}
 
-            pressure_response = self._make_request('GET', f"{self.timeseries_url}/statistics",
-                                                   params={'pipeline_id': 'N1', 'bolt_id': 'bolt_n1', 'sensor': 'pressure', 'hours': 24})
+            for sensor in ['temperature', 'pressure']:
+                if pipeline_id and bolt_id:
+                    resp = self._make_request('GET', f"{self.analytics_url}/statistics",
+                                              params={'pipeline_id': pipeline_id, 'bolt_id': bolt_id, 'sensor': sensor, 'hours': 24})
+                    if resp and resp.get('statistics'):
+                        result[sensor] = resp['statistics']
+                else:
+                    resp = self._make_request('GET', f"{self.analytics_url}/aggregated",
+                                              params={'measurement': sensor, 'aggregation': 'mean', 'hours': 24})
+                    if resp and resp.get('data'):
+                        values = [d.get('value') for d in resp['data'] if d.get('value') is not None]
+                        if values:
+                            result[sensor] = {'mean': round(sum(values) / len(values), 2), 'count': len(values)}
 
-            result = {
-                'temperature': {},
-                'pressure': {}
-            }
-
-            if temp_response and temp_response.get('statistics'):
-                result['temperature'] = temp_response['statistics']
-
-            if pressure_response and pressure_response.get('statistics'):
-                result['pressure'] = pressure_response['statistics']
             return result
 
         except Exception as e:
             logger.error(f"Error getting statistics: {e}")
-            return {
-                'temperature': {},
-                'pressure': {}
-            }
+            return {'temperature': {}, 'pressure': {}}
 
     def get_anomalies(self, pipeline_id: Optional[str] = None, limit: int = 50, bolt_id: Optional[str] = None, severity: Optional[str] = None, hours: int = 24) -> List[Dict]:
-        params = {'limit': limit, 'hours': hours}
+        params = {'limit': limit}
         if pipeline_id:
             params['pipeline_id'] = pipeline_id
         if severity:
             params['severity'] = severity
-        resp = self._make_request('GET', f"{self.timeseries_url}/alerts", params=params)
+        resp = self._make_request('GET', f"{self.analytics_url}/alerts", params=params)
         if not resp:
             return []
         alerts = resp.get('alerts', []) or []
@@ -200,7 +172,7 @@ class ServiceClient:
         return mapped[:limit]
 
     def get_predictions(self, pipeline_id: str) -> Dict:
-        details = self._make_request('GET', f"{self.resource_catalog_url}/devices/pipeline/{pipeline_id}")
+        details = self._make_request('GET', f"{self.resource_catalog_url}/pipelines/{pipeline_id}")
         if not details:
             return {}
 
@@ -232,7 +204,7 @@ class ServiceClient:
     def get_pipeline_health(self, pipeline_id: str, bolt_id: Optional[str] = None) -> Dict:
         bid = bolt_id
         if not bid:
-            details = self._make_request('GET', f"{self.resource_catalog_url}/devices/pipeline/{pipeline_id}")
+            details = self._make_request('GET', f"{self.resource_catalog_url}/pipelines/{pipeline_id}")
             if details:
                 bolts = details.get('bolts') or []
                 if bolts:
@@ -253,21 +225,16 @@ class ServiceClient:
 
     def send_valve_command(self, pipeline_id: str, valve_id: str, command: str, token: str) -> Dict:
         headers = {'Authorization': f'Bearer {token}'}
-        params = {
+        body = {
             'pipeline_id': pipeline_id,
             'valve_id': valve_id,
             'action': command,
             'reason': 'Dashboard manual control'
         }
-        response = self._make_request('GET', f"{self.control_center_url}/manual", params=params, headers=headers)
+        response = self._make_request('POST', f"{self.control_center_url}/manual", json=body, headers=headers)
         if response:
             return {'success': True, 'data': response}
         return {'success': False, 'error': 'Failed to send command'}
-
-    def get_control_status(self, token: str) -> Dict:
-        headers = {'Authorization': f'Bearer {token}'}
-        response = self._make_request('GET', f"{self.control_center_url}/status", headers=headers)
-        return response or {}
 
     def get_control_history(self, token: str, limit: int = 100) -> List[Dict]:
         headers = {'Authorization': f'Bearer {token}'}
@@ -278,7 +245,7 @@ class ServiceClient:
 
     def activate_emergency(self, token: str) -> bool:
         headers = {'Authorization': f'Bearer {token}'}
-        response = self._make_request('GET', f"{self.control_center_url}/emergency", params={'action': 'activate'}, headers=headers)
+        response = self._make_request('POST', f"{self.control_center_url}/emergency", json={'action': 'activate'}, headers=headers)
         return bool(response)
 
     def get_all_users(self, token: str) -> List[Dict]:
@@ -312,34 +279,6 @@ class ServiceClient:
                                     headers=headers)
         return response or {'error': 'Failed to delete user'}
 
-    def assign_pipeline_to_user(self, token: str, user_id: int, pipeline_id: str) -> Dict:
-        headers = {
-            'Authorization': f'Bearer {token}',
-            'Content-Type': 'application/json'
-        }
-        data = {'user_id': user_id, 'pipeline_id': pipeline_id}
-        response = self._make_request('POST', f"{self.account_manager_url}/assign-pipeline",
-                                    headers=headers, json=data)
-        return response or {'error': 'Failed to assign pipeline'}
-
-    def unassign_pipeline_from_user(self, token: str, user_id: int, pipeline_id: str) -> Dict:
-        headers = {
-            'Authorization': f'Bearer {token}',
-            'Content-Type': 'application/json'
-        }
-        data = {'user_id': user_id, 'pipeline_id': pipeline_id}
-        response = self._make_request('DELETE', f"{self.account_manager_url}/unassign-pipeline",
-                                    headers=headers, json=data)
-        return response or {'error': 'Failed to unassign pipeline'}
-
-    def get_user_pipelines(self, token: str, user_id: int) -> List[Dict]:
-        headers = {'Authorization': f'Bearer {token}'}
-        response = self._make_request('GET', f"{self.account_manager_url}/user-pipelines/{user_id}",
-                                    headers=headers)
-        if not response:
-            return []
-        return response.get('pipelines', [])
-
     def get_user_sectors(self, user_id: int) -> List[str]:
         response = self._make_request('GET', f"{self.resource_catalog_url}/users/{user_id}")
         if not response or 'user' not in response:
@@ -367,16 +306,16 @@ class ServiceClient:
             options.append({'label': label, 'value': sector_id})
         return options
 
-    def get_all_pipeline_bundles(self, token: str) -> List[Dict]:
+    def get_all_pipeline_bundles(self, token: str) -> Dict:
         headers = {'Authorization': f'Bearer {token}'}
-        response = self._make_request('GET', f"{self.resource_catalog_url}/pipelines/bundle", headers=headers)
+        response = self._make_request('GET', f"{self.resource_catalog_url}/pipelines", headers=headers)
         if not response:
             return []
         return response.get('pipeline_bundles', {})
 
     def get_pipeline_bundle(self, token: str, pipeline_id: str) -> Optional[Dict]:
         headers = {'Authorization': f'Bearer {token}'}
-        response = self._make_request('GET', f"{self.resource_catalog_url}/pipelines/bundle/{pipeline_id}", headers=headers)
+        response = self._make_request('GET', f"{self.resource_catalog_url}/pipelines/{pipeline_id}", headers=headers)
         if not response:
             return None
         return response.get('pipeline_bundle')
@@ -386,7 +325,7 @@ class ServiceClient:
             'Authorization': f'Bearer {token}',
             'Content-Type': 'application/json'
         }
-        response = self._make_request('POST', f"{self.resource_catalog_url}/pipelines/bundle",
+        response = self._make_request('POST', f"{self.resource_catalog_url}/pipelines",
                                     headers=headers, json=bundle_data)
         return response or {'error': 'Failed to create pipeline bundle'}
 
@@ -395,35 +334,15 @@ class ServiceClient:
             'Authorization': f'Bearer {token}',
             'Content-Type': 'application/json'
         }
-        response = self._make_request('PUT', f"{self.resource_catalog_url}/pipelines/bundle/{pipeline_id}",
+        response = self._make_request('PUT', f"{self.resource_catalog_url}/pipelines/{pipeline_id}",
                                     headers=headers, json=updates)
         return response or {'error': 'Failed to update pipeline bundle'}
 
     def delete_pipeline_bundle(self, token: str, pipeline_id: str) -> Dict:
         headers = {'Authorization': f'Bearer {token}'}
-        self._make_request('DELETE', f"{self.account_manager_url}/cleanup-pipeline/{pipeline_id}",
-                          headers=headers)
-        response = self._make_request('DELETE', f"{self.resource_catalog_url}/pipelines/bundle/{pipeline_id}",
+        response = self._make_request('DELETE', f"{self.resource_catalog_url}/pipelines/{pipeline_id}",
                                     headers=headers)
         return response or {'error': 'Failed to delete pipeline bundle'}
-
-    def validate_pipeline_bundle(self, token: str, pipeline_id: str) -> Dict:
-        bundle = self.get_pipeline_bundle(token, pipeline_id)
-        if not bundle:
-            return {'valid': False, 'error': 'Pipeline bundle not found'}
-
-        bundle_info = bundle.get('bundle_info', {})
-        is_complete = bundle_info.get('is_complete', False)
-        total_bolts = bundle_info.get('total_bolts', 0)
-        total_valves = bundle_info.get('total_valves', 0)
-
-        if not is_complete:
-            return {
-                'valid': False,
-                'error': f'Incomplete bundle: {total_bolts} bolts, {total_valves} valves (expected: 1 bolt, 1 valve)'
-            }
-
-        return {'valid': True, 'message': 'Pipeline bundle is valid'}
 
     def close(self):
         self.session.close()

@@ -4,6 +4,7 @@ import dash_bootstrap_components as dbc
 import json
 from typing import Dict, List
 from datetime import datetime
+from components.layouts import format_timestamp
 
 
 
@@ -280,11 +281,7 @@ def create_pipeline_bundles_table(bundles):
         total_bolts = bundle_info.get('total_bolts', 0)
         total_valves = bundle_info.get('total_valves', 0)
 
-        last_update = pipeline.get('last_update')
-        if last_update:
-            last_update_str = datetime.fromtimestamp(last_update).strftime("%Y-%m-%d %H:%M")
-        else:
-            last_update_str = 'N/A'
+        last_update_str = format_timestamp(pipeline.get('last_update'))
 
         table_rows.append(
             html.Tr([

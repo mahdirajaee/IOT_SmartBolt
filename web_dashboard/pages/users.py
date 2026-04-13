@@ -11,7 +11,6 @@ def create_layout(service_client):
     refresh_seconds = max(int(30000 / 1000), 1)
     return dbc.Container([
         dcc.Store(id='users-store', data=[]),
-        dcc.Store(id='pipelines-store', data=[]),
         dcc.Interval(id='users-interval', interval=30000, n_intervals=0),
 
         html.Div([
@@ -141,14 +140,17 @@ def create_layout(service_client):
 
                     dbc.Row([
                         dbc.Col([
-                            dbc.Label("Assigned Pipelines"),
-                            dbc.Checklist(
-                                id="user-pipelines-checklist",
-                                options=[],
-                                value=[],
-                                inline=True
+                            dbc.Label("Sector"),
+                            dbc.Select(
+                                id="user-sector-select",
+                                options=[
+                                    {"label": "No Sector", "value": ""},
+                                    {"label": "North Sector", "value": "sector-north"},
+                                    {"label": "South Sector", "value": "sector-south"}
+                                ],
+                                value=""
                             )
-                        ])
+                        ], width=6)
                     ], className="mb-3"),
 
                     dbc.Alert(id="user-modal-alert", is_open=False, className="mb-3")
@@ -258,20 +260,16 @@ def create_users_table(users):
 def register_callbacks(app, service_client):
 
     @app.callback(
-        [Output('users-store', 'data'),
-         Output('pipelines-store', 'data')],
+        Output('users-store', 'data'),
         [Input('users-interval', 'n_intervals'),
          Input('refresh-users-button', 'n_clicks')],
         [State('auth-store', 'data')]
     )
-    def load_users_and_pipelines(n_intervals, refresh_clicks, auth_data):
+    def load_users(n_intervals, refresh_clicks, auth_data):
         if not auth_data or not auth_data.get('token'):
-            return [], []
+            return []
 
-        users = service_client.get_all_users(auth_data['token'])
-        pipelines = service_client.get_pipelines()
-
-        return users, pipelines
+        return service_client.get_all_users(auth_data['token'])
 
     @app.callback(
         Output('users-table-container', 'children'),
@@ -289,30 +287,23 @@ def register_callbacks(app, service_client):
          Output('user-email-input', 'value'),
          Output('user-password-input', 'value'),
          Output('user-role-select', 'value'),
-         Output('user-pipelines-checklist', 'options'),
-         Output('user-pipelines-checklist', 'value')],
+         Output('user-sector-select', 'value')],
         [Input('add-user-button', 'n_clicks'),
          Input({'type': 'edit-user-btn', 'index': ALL}, 'n_clicks'),
          Input('user-modal-cancel', 'n_clicks')],
         [State('users-store', 'data'),
-         State('pipelines-store', 'data'),
          State('auth-store', 'data')],
         prevent_initial_call=True
     )
-    def handle_user_modal(add_clicks, edit_clicks, cancel_clicks, users, pipelines, auth_data):
+    def handle_user_modal(add_clicks, edit_clicks, cancel_clicks, users, auth_data):
         triggered_id = ctx.triggered_id
 
-        pipeline_options = [
-            {"label": f"Pipeline {p['pipeline_id']}", "value": p['pipeline_id']}
-            for p in pipelines
-        ] if pipelines else []
-
         if triggered_id == 'user-modal-cancel':
-            return False, "", "create", None, "", "", "", "viewer", pipeline_options, []
+            return False, "", "create", None, "", "", "", "viewer", ""
 
         if triggered_id == 'add-user-button':
             if add_clicks and add_clicks > 0:
-                return True, "Add New User", "create", None, "", "", "", "viewer", pipeline_options, []
+                return True, "Add New User", "create", None, "", "", "", "viewer", ""
             raise PreventUpdate
 
         if isinstance(triggered_id, dict) and triggered_id.get('type') == 'edit-user-btn':
@@ -329,9 +320,6 @@ def register_callbacks(app, service_client):
             user = next((u for u in users if u.get('id') == clicked_index), None)
 
             if user and auth_data:
-                user_pipelines = service_client.get_user_pipelines(auth_data['token'], clicked_index)
-                assigned_pipeline_ids = [p['pipeline_id'] for p in user_pipelines]
-
                 return (
                     True,
                     f"Edit User: {user.get('username', 'N/A')}",
@@ -341,8 +329,7 @@ def register_callbacks(app, service_client):
                     user.get('email', ''),
                     "",
                     user.get('role', 'viewer'),
-                    pipeline_options,
-                    assigned_pipeline_ids
+                    user.get('sector_id', '') or ""
                 )
 
         raise PreventUpdate
@@ -359,12 +346,12 @@ def register_callbacks(app, service_client):
          State('user-email-input', 'value'),
          State('user-password-input', 'value'),
          State('user-role-select', 'value'),
-         State('user-pipelines-checklist', 'value'),
+         State('user-sector-select', 'value'),
          State('auth-store', 'data'),
          State('users-interval', 'n_intervals')],
         prevent_initial_call=True
     )
-    def save_user(save_clicks, mode, user_id, username, email, password, role, selected_pipelines, auth_data, intervals):
+    def save_user(save_clicks, mode, user_id, username, email, password, role, selected_sector, auth_data, intervals):
         if not save_clicks or not auth_data or not auth_data.get('token'):
             raise PreventUpdate
 
@@ -375,19 +362,12 @@ def register_callbacks(app, service_client):
             if not password or len(password) < 8:
                 return "Password must be at least 8 characters long.", True, "danger", intervals
 
-            sector_id = None
-            if selected_pipelines:
-                if any(p.startswith("N") for p in selected_pipelines):
-                    sector_id = "sector-north"
-                elif any(p.startswith("S") for p in selected_pipelines):
-                    sector_id = "sector-south"
-
             user_data = {
                 'username': username,
                 'email': email,
                 'password': password,
                 'role': role,
-                'sector_id': sector_id
+                'sector_id': selected_sector or None
             }
 
             result = service_client.create_user(auth_data['token'], user_data)
@@ -395,17 +375,13 @@ def register_callbacks(app, service_client):
             if 'error' in result:
                 return f"Error creating user: {result['error']}", True, "danger", intervals
 
-            new_user_id = result.get('user_id')
-            if new_user_id and selected_pipelines:
-                for pipeline_id in selected_pipelines:
-                    service_client.assign_pipeline_to_user(auth_data['token'], new_user_id, pipeline_id)
-
             return "User created successfully!", True, "success", intervals + 1
 
         else:
             updates = {
                 'email': email,
-                'role': role
+                'role': role,
+                'sector_id': selected_sector or None
             }
             if password and len(password) >= 8:
                 updates['password'] = password
@@ -416,19 +392,6 @@ def register_callbacks(app, service_client):
 
             if 'error' in result:
                 return f"Error updating user: {result['error']}", True, "danger", intervals
-
-            current_pipelines = service_client.get_user_pipelines(auth_data['token'], user_id)
-            current_pipeline_ids = {p['pipeline_id'] for p in current_pipelines}
-            selected_pipeline_ids = set(selected_pipelines or [])
-
-            to_assign = selected_pipeline_ids - current_pipeline_ids
-            to_unassign = current_pipeline_ids - selected_pipeline_ids
-
-            for pipeline_id in to_assign:
-                service_client.assign_pipeline_to_user(auth_data['token'], user_id, pipeline_id)
-
-            for pipeline_id in to_unassign:
-                service_client.unassign_pipeline_from_user(auth_data['token'], user_id, pipeline_id)
 
             return "User updated successfully!", True, "success", intervals + 1
 

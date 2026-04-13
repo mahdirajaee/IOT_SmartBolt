@@ -1,5 +1,18 @@
 from dash import html, dcc
 import dash_bootstrap_components as dbc
+from datetime import datetime
+
+
+def format_timestamp(timestamp):
+    if timestamp == 'Unknown' or not timestamp:
+        return 'Unknown'
+    try:
+        if isinstance(timestamp, (int, float)):
+            dt = datetime.fromtimestamp(timestamp)
+            return dt.strftime("%Y-%m-%d %H:%M:%S")
+        return str(timestamp)
+    except Exception:
+        return 'Unknown'
 
 
 def create_login_layout():
@@ -194,71 +207,3 @@ def create_navbar(user_info):
     )
 
 
-def create_loading_component():
-    return dbc.Container([
-        dbc.Row([
-            dbc.Col([
-                dbc.Spinner(size="lg", color="primary"),
-                html.P("Loading...", className="mt-2")
-            ], className="text-center")
-        ], className="vh-100 align-items-center")
-    ])
-
-
-def create_error_alert(message):
-    return dbc.Alert(
-        [
-            html.I(className="fas fa-exclamation-triangle me-2"),
-            message
-        ],
-        color="danger",
-        className="mb-3"
-    )
-
-
-def create_success_alert(message):
-    return dbc.Alert(
-        [
-            html.I(className="fas fa-check-circle me-2"),
-            message
-        ],
-        color="success",
-        className="mb-3"
-    )
-
-
-def create_info_card(title, value, icon=None, color="primary"):
-    return dbc.Card([
-        dbc.CardBody([
-            dbc.Row([
-                dbc.Col([
-                    html.H6(title, className="text-muted mb-2"),
-                    html.H3(value, className="mb-0")
-                ], width=8),
-                dbc.Col([
-                    html.I(className=f"fas {icon} fa-2x text-{color}") if icon else None
-                ], width=4, className="text-end") if icon else None
-            ])
-        ])
-    ], className="mb-3")
-
-
-def create_status_badge(status):
-    color_map = {
-        'active': 'success',
-        'inactive': 'secondary',
-        'error': 'danger',
-        'warning': 'warning',
-        'critical': 'danger',
-        'normal': 'success',
-        'online': 'success',
-        'offline': 'danger'
-    }
-
-    color = color_map.get(status.lower(), 'secondary')
-
-    return dbc.Badge(
-        status.upper(),
-        color=color,
-        className="ms-2"
-    )

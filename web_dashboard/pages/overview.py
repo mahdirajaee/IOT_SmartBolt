@@ -1,4 +1,5 @@
 from dash import html, dcc, callback, Input, Output
+from dash.exceptions import PreventUpdate
 import dash_bootstrap_components as dbc
 import plotly.graph_objs as go
 from datetime import datetime
@@ -136,7 +137,7 @@ def register_callbacks(app, service_client):
     )
     def update_overview_sector_options(auth_data):
         if not auth_data:
-            return [], None
+            raise PreventUpdate
         user = auth_data.get('user', {})
         user_id = user.get('id')
         role = user.get('role', 'viewer')
@@ -154,11 +155,20 @@ def register_callbacks(app, service_client):
         active_pipelines = sum(1 for p in pipelines if p.get('status') == 'active')
         total_pipelines = len(pipelines)
 
-        statistics = service_client.get_statistics()
+        pid, bid = None, None
+        if sector_filter and sector_filter != 'all' and pipelines:
+            first = pipelines[0]
+            pid = first['pipeline_id']
+            bolts = first.get('bolts', [])
+            if bolts:
+                bid = bolts[0] if isinstance(bolts[0], str) else bolts[0].get('bolt_id')
+        statistics = service_client.get_statistics(pipeline_id=pid, bolt_id=bid)
         avg_temp = statistics.get('temperature', {}).get('mean')
         avg_pressure = statistics.get('pressure', {}).get('mean')
 
-        anomalies = service_client.get_anomalies(limit=100)
+        pipeline_ids = {p['pipeline_id'] for p in pipelines}
+        all_anomalies = service_client.get_anomalies(limit=100)
+        anomalies = [a for a in all_anomalies if not pipeline_ids or a.get('pipeline_id') in pipeline_ids]
         critical_count = sum(1 for a in anomalies if a.get('severity') == 'critical')
         warning_count = sum(1 for a in anomalies if a.get('severity') == 'warning')
 
@@ -207,11 +217,20 @@ def register_callbacks(app, service_client):
     @app.callback(
         [Output('overview-temp-chart', 'figure'),
          Output('overview-pressure-chart', 'figure')],
-        Input('overview-interval', 'n_intervals')
+        [Input('overview-interval', 'n_intervals'),
+         Input('overview-sector-filter', 'value')]
     )
-    def update_charts(n):
-        temp_data = service_client.get_temperature_data(hours=24)
-        pressure_data = service_client.get_pressure_data(hours=24)
+    def update_charts(n, sector_filter):
+        temp_data = []
+        pressure_data = []
+        if sector_filter and sector_filter != 'all':
+            sector_pipelines = service_client.get_pipelines_by_sector(sector_filter)
+            for p in sector_pipelines:
+                temp_data.extend(service_client.get_sensor_data('temperature', pipeline_id=p['pipeline_id'], hours=24))
+                pressure_data.extend(service_client.get_sensor_data('pressure', pipeline_id=p['pipeline_id'], hours=24))
+        else:
+            temp_data = service_client.get_sensor_data('temperature', hours=24)
+            pressure_data = service_client.get_sensor_data('pressure', hours=24)
 
         temp_fig = go.Figure()
         if temp_data:
@@ -334,10 +353,17 @@ def register_callbacks(app, service_client):
 
     @app.callback(
         Output('recent-alerts-list', 'children'),
-        Input('overview-interval', 'n_intervals')
+        [Input('overview-interval', 'n_intervals'),
+         Input('overview-sector-filter', 'value')]
     )
-    def update_recent_alerts(n):
-        alerts = service_client.get_anomalies(limit=5)
+    def update_recent_alerts(n, sector_filter):
+        if sector_filter and sector_filter != 'all':
+            sector_pipelines = service_client.get_pipelines_by_sector(sector_filter)
+            pipeline_ids = {p['pipeline_id'] for p in sector_pipelines}
+            all_alerts = service_client.get_anomalies(limit=20)
+            alerts = [a for a in all_alerts if a.get('pipeline_id') in pipeline_ids][:5]
+        else:
+            alerts = service_client.get_anomalies(limit=5)
 
         if not alerts:
             return html.Div([
