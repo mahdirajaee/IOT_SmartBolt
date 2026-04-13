@@ -1,7 +1,7 @@
 {
   "projectOwner": "Mahdi Rajaee, Mohammad Eftekharipour, Tanin Heidarloui Moghaddam",
   "projectName": "IoT Pipeline Monitoring System",
-  "lastUpdate": "2026-03-30 15:08",
+  "lastUpdate": "2026-04-12 20:03",
   "broker": {
     "IP": "localhost",
     "port": 1883
@@ -17,346 +17,69 @@
       "serviceID": "timeseries_db",
       "REST_endpoint": "http://localhost:8082",
       "MQTT_topic": "sectors/+/pipelines/+/measurements,sectors/+/pipelines/+/alerts/+",
-      "timestamp": "2026-03-30 15:08"
+      "timestamp": "2026-04-12 20:02"
     },
     {
       "serviceID": "analytics",
       "REST_endpoint": "http://localhost:8083",
-      "MQTT_topic": "sectors/+/pipelines/+/alerts/+",
-      "timestamp": "2026-03-30 14:49"
+      "MQTT_topic": "sectors/+/pipelines/+/measurements,sectors/+/pipelines/+/alerts/+",
+      "timestamp": "2026-04-12 20:02"
     },
     {
       "serviceID": "account_manager",
-      "REST_endpoint": "http://127.0.0.1:8084",
+      "REST_endpoint": "http://localhost:8084",
       "MQTT_topic": "",
-      "timestamp": "2026-03-30 14:49"
+      "timestamp": "2026-04-12 20:01"
     },
     {
       "serviceID": "control_center",
-      "REST_endpoint": "http://127.0.0.1:8085",
-      "MQTT_topic": "sectors/+/pipelines/+/commands/valves",
-      "timestamp": "2026-03-30 14:49"
+      "REST_endpoint": "http://localhost:8085",
+      "MQTT_topic": "sectors/+/pipelines/+/commands/valves,telegram/commands/+",
+      "timestamp": "2026-04-12 20:02"
     },
     {
       "serviceID": "raspberry_pi_north",
       "REST_endpoint": "http://localhost:8086",
-      "MQTT_topic": "sectors/sector-north/pipelines/+/measurements",
-      "timestamp": ""
+      "MQTT_topic": "sectors/sector-north/pipelines/+/measurements,sectors/sector-north/pipelines/+/commands/valves",
+      "timestamp": "2026-04-12 20:03"
     },
     {
       "serviceID": "telegram_bot",
-      "REST_endpoint": "http://127.0.0.1:8087",
-      "MQTT_topic": "sectors/+/pipelines/+/alerts/+",
-      "timestamp": "2026-03-30 14:49"
+      "REST_endpoint": "http://localhost:8087",
+      "MQTT_topic": "sectors/+/pipelines/+/alerts/+,alerts/anomalies/+,telegram/commands/+",
+      "timestamp": "2026-04-12 20:03"
     },
     {
       "serviceID": "raspberry_pi_south",
       "REST_endpoint": "http://localhost:8088",
-      "MQTT_topic": "sectors/sector-south/pipelines/+/measurements",
-      "timestamp": ""
+      "MQTT_topic": "sectors/sector-south/pipelines/+/measurements,sectors/sector-south/pipelines/+/commands/valves",
+      "timestamp": "2026-04-12 20:03"
     },
     {
       "serviceID": "web_dashboard",
       "REST_endpoint": "http://127.0.0.1:8090",
       "MQTT_topic": "",
-      "timestamp": "2026-03-30 14:49"
+      "timestamp": "2026-04-12 20:03"
     },
     {
       "serviceID": "message_broker",
-      "REST_endpoint": "http://127.0.0.1:8089",
+      "REST_endpoint": "http://localhost:8089",
+      "MQTT_topic": "sectors/+/pipelines/+/#,telegram/commands/+,alerts/anomalies/+",
+      "timestamp": "2026-04-11 19:54"
+    },
+    {
+      "serviceID": "test_service",
+      "REST_endpoint": "http://localhost:9999",
       "MQTT_topic": "",
-      "timestamp": "2026-03-30 14:49"
-    },
-    {
-      "serviceID": "raspberry_pi",
-      "REST_endpoint": "http://127.0.0.1:8088",
-      "MQTT_topic": "",
-      "timestamp": "2026-03-30 15:08"
-    },
-    {
-      "serviceID": "raspberrypi",
-      "REST_endpoint": "http://localhost:8088",
-      "MQTT_topic": "",
-      "timestamp": "2026-03-30 15:08"
-    }
-  ],
-  "devicesList": [
-    {
-      "deviceID": "bolt_n1",
-      "deviceName": "Smart Bolt",
-      "measureType": [
-        "Temperature",
-        "Pressure"
-      ],
-      "availableServices": [
-        "MQTT",
-        "REST"
-      ],
-      "servicesDetails": [
-        {
-          "serviceType": "MQTT",
-          "topic": [
-            "temperature/N1/bolt_n1",
-            "pressure/N1/bolt_n1"
-          ]
-        },
-        {
-          "serviceType": "REST",
-          "serviceIP": "localhost:8082"
-        }
-      ],
-      "lastUpdate": ""
-    },
-    {
-      "deviceID": "bolt_n2",
-      "deviceName": "Smart Bolt",
-      "measureType": [
-        "Temperature",
-        "Pressure"
-      ],
-      "availableServices": [
-        "MQTT",
-        "REST"
-      ],
-      "servicesDetails": [
-        {
-          "serviceType": "MQTT",
-          "topic": [
-            "temperature/N2/bolt_n2",
-            "pressure/N2/bolt_n2"
-          ]
-        },
-        {
-          "serviceType": "REST",
-          "serviceIP": "localhost:8082"
-        }
-      ],
-      "lastUpdate": ""
-    },
-    {
-      "deviceID": "bolt_n3",
-      "deviceName": "Smart Bolt",
-      "measureType": [
-        "Temperature",
-        "Pressure"
-      ],
-      "availableServices": [
-        "MQTT",
-        "REST"
-      ],
-      "servicesDetails": [
-        {
-          "serviceType": "MQTT",
-          "topic": [
-            "temperature/N3/bolt_n3",
-            "pressure/N3/bolt_n3"
-          ]
-        },
-        {
-          "serviceType": "REST",
-          "serviceIP": "localhost:8082"
-        }
-      ],
-      "lastUpdate": ""
-    },
-    {
-      "deviceID": "bolt_s1",
-      "deviceName": "Smart Bolt",
-      "measureType": [
-        "Temperature",
-        "Pressure"
-      ],
-      "availableServices": [
-        "MQTT",
-        "REST"
-      ],
-      "servicesDetails": [
-        {
-          "serviceType": "MQTT",
-          "topic": [
-            "temperature/S1/bolt_s1",
-            "pressure/S1/bolt_s1"
-          ]
-        },
-        {
-          "serviceType": "REST",
-          "serviceIP": "localhost:8082"
-        }
-      ],
-      "lastUpdate": ""
-    },
-    {
-      "deviceID": "bolt_s2",
-      "deviceName": "Smart Bolt",
-      "measureType": [
-        "Temperature",
-        "Pressure"
-      ],
-      "availableServices": [
-        "MQTT",
-        "REST"
-      ],
-      "servicesDetails": [
-        {
-          "serviceType": "MQTT",
-          "topic": [
-            "temperature/S2/bolt_s2",
-            "pressure/S2/bolt_s2"
-          ]
-        },
-        {
-          "serviceType": "REST",
-          "serviceIP": "localhost:8082"
-        }
-      ],
-      "lastUpdate": ""
-    },
-    {
-      "deviceID": "bolt_s3",
-      "deviceName": "Smart Bolt",
-      "measureType": [
-        "Temperature",
-        "Pressure"
-      ],
-      "availableServices": [
-        "MQTT",
-        "REST"
-      ],
-      "servicesDetails": [
-        {
-          "serviceType": "MQTT",
-          "topic": [
-            "temperature/S3/bolt_s3",
-            "pressure/S3/bolt_s3"
-          ]
-        },
-        {
-          "serviceType": "REST",
-          "serviceIP": "localhost:8082"
-        }
-      ],
-      "lastUpdate": ""
-    },
-    {
-      "deviceID": "valve_n1",
-      "deviceName": "Control Valve",
-      "measureType": [
-        "ValveState"
-      ],
-      "availableServices": [
-        "MQTT"
-      ],
-      "servicesDetails": [
-        {
-          "serviceType": "MQTT",
-          "topic": [
-            "commands/valves/N1"
-          ]
-        }
-      ],
-      "lastUpdate": ""
-    },
-    {
-      "deviceID": "valve_n2",
-      "deviceName": "Control Valve",
-      "measureType": [
-        "ValveState"
-      ],
-      "availableServices": [
-        "MQTT"
-      ],
-      "servicesDetails": [
-        {
-          "serviceType": "MQTT",
-          "topic": [
-            "commands/valves/N2"
-          ]
-        }
-      ],
-      "lastUpdate": ""
-    },
-    {
-      "deviceID": "valve_n3",
-      "deviceName": "Control Valve",
-      "measureType": [
-        "ValveState"
-      ],
-      "availableServices": [
-        "MQTT"
-      ],
-      "servicesDetails": [
-        {
-          "serviceType": "MQTT",
-          "topic": [
-            "commands/valves/N3"
-          ]
-        }
-      ],
-      "lastUpdate": ""
-    },
-    {
-      "deviceID": "valve_s1",
-      "deviceName": "Control Valve",
-      "measureType": [
-        "ValveState"
-      ],
-      "availableServices": [
-        "MQTT"
-      ],
-      "servicesDetails": [
-        {
-          "serviceType": "MQTT",
-          "topic": [
-            "commands/valves/S1"
-          ]
-        }
-      ],
-      "lastUpdate": ""
-    },
-    {
-      "deviceID": "valve_s2",
-      "deviceName": "Control Valve",
-      "measureType": [
-        "ValveState"
-      ],
-      "availableServices": [
-        "MQTT"
-      ],
-      "servicesDetails": [
-        {
-          "serviceType": "MQTT",
-          "topic": [
-            "commands/valves/S2"
-          ]
-        }
-      ],
-      "lastUpdate": ""
-    },
-    {
-      "deviceID": "valve_s3",
-      "deviceName": "Control Valve",
-      "measureType": [
-        "ValveState"
-      ],
-      "availableServices": [
-        "MQTT"
-      ],
-      "servicesDetails": [
-        {
-          "serviceType": "MQTT",
-          "topic": [
-            "commands/valves/S3"
-          ]
-        }
-      ],
-      "lastUpdate": ""
+      "timestamp": "2026-04-09 11:40"
     }
   ],
   "usersList": [
     {
       "userName": "admin",
       "userID": 1,
-      "chatID": 72043102,
+      "chatID": 207251107,
+      "passwordHash": "$2b$12$eX4keRD7iN3BmVAo4RPaPuhmcFU1Upp5Tz6dcMgg7uKE63ekqjvOC",
       "sectors": [
         {
           "sectorID": "sector-north"
@@ -422,8 +145,7 @@
                 {
                   "serviceType": "MQTT",
                   "topic": [
-                    "temperature/N1/bolt_n1",
-                    "pressure/N1/bolt_n1"
+                    "sectors/sector-north/pipelines/N1/measurements"
                   ]
                 },
                 {
@@ -446,7 +168,7 @@
                 {
                   "serviceType": "MQTT",
                   "topic": [
-                    "commands/valves/N1"
+                    "sectors/sector-north/pipelines/N1/commands/valves"
                   ]
                 }
               ],
@@ -475,8 +197,7 @@
                 {
                   "serviceType": "MQTT",
                   "topic": [
-                    "temperature/N2/bolt_n2",
-                    "pressure/N2/bolt_n2"
+                    "sectors/sector-north/pipelines/N2/measurements"
                   ]
                 },
                 {
@@ -499,7 +220,7 @@
                 {
                   "serviceType": "MQTT",
                   "topic": [
-                    "commands/valves/N2"
+                    "sectors/sector-north/pipelines/N2/commands/valves"
                   ]
                 }
               ],
@@ -528,8 +249,7 @@
                 {
                   "serviceType": "MQTT",
                   "topic": [
-                    "temperature/N3/bolt_n3",
-                    "pressure/N3/bolt_n3"
+                    "sectors/sector-north/pipelines/N3/measurements"
                   ]
                 },
                 {
@@ -552,7 +272,7 @@
                 {
                   "serviceType": "MQTT",
                   "topic": [
-                    "commands/valves/N3"
+                    "sectors/sector-north/pipelines/N3/commands/valves"
                   ]
                 }
               ],
@@ -587,8 +307,7 @@
                 {
                   "serviceType": "MQTT",
                   "topic": [
-                    "temperature/S1/bolt_s1",
-                    "pressure/S1/bolt_s1"
+                    "sectors/sector-south/pipelines/S1/measurements"
                   ]
                 },
                 {
@@ -611,7 +330,7 @@
                 {
                   "serviceType": "MQTT",
                   "topic": [
-                    "commands/valves/S1"
+                    "sectors/sector-south/pipelines/S1/commands/valves"
                   ]
                 }
               ],
@@ -640,8 +359,7 @@
                 {
                   "serviceType": "MQTT",
                   "topic": [
-                    "temperature/S2/bolt_s2",
-                    "pressure/S2/bolt_s2"
+                    "sectors/sector-south/pipelines/S2/measurements"
                   ]
                 },
                 {
@@ -664,7 +382,7 @@
                 {
                   "serviceType": "MQTT",
                   "topic": [
-                    "commands/valves/S2"
+                    "sectors/sector-south/pipelines/S2/commands/valves"
                   ]
                 }
               ],
@@ -693,8 +411,7 @@
                 {
                   "serviceType": "MQTT",
                   "topic": [
-                    "temperature/S3/bolt_s3",
-                    "pressure/S3/bolt_s3"
+                    "sectors/sector-south/pipelines/S3/measurements"
                   ]
                 },
                 {
@@ -717,7 +434,7 @@
                 {
                   "serviceType": "MQTT",
                   "topic": [
-                    "commands/valves/S3"
+                    "sectors/sector-south/pipelines/S3/commands/valves"
                   ]
                 }
               ],
