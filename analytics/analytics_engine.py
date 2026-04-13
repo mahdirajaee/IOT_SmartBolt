@@ -255,9 +255,11 @@ class AnalyticsEngine:
                 predictions.append(round(predicted_value, 2))
             
             return {
-                "predictions": predictions,
+                "next_values": predictions,
+                "trend": trend_result["trend"],
                 "method": "linear_trend",
-                "confidence": trend_result["confidence"]
+                "confidence": trend_result["confidence"],
+                "slope": trend_result["slope"]
             }
         else:
             mean_value = statistics.mean(recent_values[-5:])
@@ -269,9 +271,11 @@ class AnalyticsEngine:
                 predictions.append(round(predicted_value, 2))
             
             return {
-                "predictions": predictions,
+                "next_values": predictions,
+                "trend": trend_result["trend"],
                 "method": "mean_based",
-                "confidence": 30
+                "confidence": 30,
+                "slope": trend_result.get("slope", 0)
             }
     
     def calculate_health_score(self, temp_stats, pressure_stats, anomaly_data):

@@ -41,8 +41,8 @@ class AnalyticsWebService(object):
         self.max_data_points = int(os.getenv("MAX_DATA_POINTS", 1000))
         
         self.analytics_engine = AnalyticsEngine()
-        self.mqtt_publisher = MQTTPublisher(self.mqtt_broker, self.mqtt_port)
         self.catalog_client = CatalogClient(self.resource_catalog_url)
+        self.mqtt_publisher = MQTTPublisher(self.mqtt_broker, self.mqtt_port, catalog_client=self.catalog_client)
 
         self.thresholds = {
             "temperature": {
@@ -211,25 +211,30 @@ class AnalyticsWebService(object):
             self.alert_history.insert(0, alert_data)  
             if len(self.alert_history) > self.max_alert_history:
                 self.alert_history = self.alert_history[:self.max_alert_history]
-            logger.info(f"Alert stored: {alert_data.get('anomaly_type', 'unknown')} - {alert_data.get('pipeline_id')}")
+            logger.info(f"Alert stored: {alert_data.get('anomaly_type', 'unknown')} - {alert_data.get('pipeline_id')} ({alert_data.get('sensor_type', 'unknown')})")
 
         pipeline_id = alert_data.get("pipeline_id", "unknown")
         try:
-            topic = f"alerts/anomalies/{pipeline_id}"
+            sector_id = alert_data.get("sector_id", "sector-unknown")
+            alert_type = alert_data.get("anomaly_type", "unknown")
+            topic = f"sectors/{sector_id}/pipelines/{pipeline_id}/alerts/{alert_type}"
             alert_mqtt = {
                 "pipeline_id": pipeline_id,
                 "bolt_id": alert_data.get("bolt_id"),
                 "sector_id": alert_data.get("sector_id", "sector-unknown"),
+                "alert_type": alert_data.get("anomaly_type"),
                 "anomaly_type": alert_data.get("anomaly_type"),
                 "severity": alert_data.get("severity"),
+                "message": alert_data.get("message", ""),
                 "description": alert_data.get("message", ""),
                 "temperature": alert_data.get("value") if alert_data.get("sensor_type") == "temperature" else None,
                 "pressure": alert_data.get("value") if alert_data.get("sensor_type") == "pressure" else None,
                 "timestamp": alert_data.get("timestamp", time.time())
             }
+            alert_mqtt["recipient_chat_ids"] = self.catalog_client.get_chat_ids_for_sector(sector_id) if self.catalog_client else []
             if self.mqtt_publisher.connected:
                 self.mqtt_publisher.mqtt.myPublish(topic, alert_mqtt)
-                logger.debug(f"Alert published to MQTT: {topic}")
+                logger.debug(f"Alert published to MQTT: {topic} for {len(alert_mqtt['recipient_chat_ids'])} recipients")
         except Exception as e:
             logger.error(f"Failed to publish alert to MQTT: {e}")
 
@@ -268,42 +273,197 @@ class AnalyticsWebService(object):
             logger.error(f"Error fetching data from {endpoint}: {e}")
             return []
 
+    def _analyze_trend(self, pipeline_id, bolt_id):
+        cache_key = f"trend_{pipeline_id}_{bolt_id}"
+
+        def fetch():
+            temp_data = self.fetch_timeseries_data("temperature", {
+                "pipeline_id": pipeline_id, "bolt_id": bolt_id, "limit": 100
+            })
+            pressure_data = self.fetch_timeseries_data("pressure", {
+                "pipeline_id": pipeline_id, "bolt_id": bolt_id, "limit": 100
+            })
+            return {
+                "temperature_trend": self.analytics_engine.calculate_trend(temp_data, "temperature"),
+                "pressure_trend": self.analytics_engine.calculate_trend(pressure_data, "pressure")
+            }
+
+        return self.get_cached_or_fetch(cache_key, fetch)
+
+    def _analyze_statistics(self, pipeline_id, bolt_id):
+        cache_key = f"stats_{pipeline_id}_{bolt_id}"
+
+        def fetch():
+            temp_data = self.fetch_timeseries_data("temperature", {
+                "pipeline_id": pipeline_id, "bolt_id": bolt_id, "limit": self.max_data_points
+            })
+            pressure_data = self.fetch_timeseries_data("pressure", {
+                "pipeline_id": pipeline_id, "bolt_id": bolt_id, "limit": self.max_data_points
+            })
+            temp_values = [point.get("temperature", 0) for point in temp_data]
+            pressure_values = [point.get("pressure", 0) for point in pressure_data]
+            return {
+                "temperature_stats": self.analytics_engine.calculate_statistics(temp_values),
+                "pressure_stats": self.analytics_engine.calculate_statistics(pressure_values)
+            }
+
+        return self.get_cached_or_fetch(cache_key, fetch)
+
+    def _analyze_anomalies(self, pipeline_id, bolt_id):
+        cache_key = f"anomalies_{pipeline_id}_{bolt_id}"
+
+        def fetch():
+            pipelines = self.catalog_client.get_all_pipelines()
+            pipeline_data = pipelines.get(pipeline_id, {})
+            sector_id = pipeline_data.get("sector_id", "sector-unknown")
+
+            temp_data = self.fetch_timeseries_data("temperature", {
+                "pipeline_id": pipeline_id, "bolt_id": bolt_id, "limit": self.max_data_points
+            })
+            pressure_data = self.fetch_timeseries_data("pressure", {
+                "pipeline_id": pipeline_id, "bolt_id": bolt_id, "limit": self.max_data_points
+            })
+
+            temp_values = [point.get("temperature", 0) for point in temp_data] if temp_data else []
+            pressure_values = [point.get("pressure", 0) for point in pressure_data] if pressure_data else []
+
+            anomaly_results = []
+            if temp_values and pressure_values:
+                for i, (temp, pressure) in enumerate(zip(temp_values[-10:], pressure_values[-10:])):
+                    result = self.anomaly_detector.detect_anomaly(pipeline_id, bolt_id, temp, pressure)
+                    if result.is_anomaly:
+                        anomaly_results.append({
+                            "index": i,
+                            "type": result.anomaly_type.value if result.anomaly_type else "unknown",
+                            "severity": result.severity.value if result.severity else "unknown",
+                            "description": result.description,
+                            "confidence": result.confidence,
+                            "recommendations": result.recommendations,
+                            "temperature": temp,
+                            "pressure": pressure
+                        })
+
+            temp_anomalies = self.analytics_engine.detect_anomaly_patterns(
+                temp_data, "temperature", self.thresholds["temperature"]["alert"]
+            )
+            pressure_anomalies = self.analytics_engine.detect_anomaly_patterns(
+                pressure_data, "pressure", self.thresholds["pressure"]["alert"]
+            )
+
+            if temp_anomalies.get("severity") in ["high", "critical"]:
+                self.mqtt_publisher.publish_anomaly_alert(pipeline_id, bolt_id, temp_anomalies, "temperature", sector_id)
+            if pressure_anomalies.get("severity") in ["high", "critical"]:
+                self.mqtt_publisher.publish_anomaly_alert(pipeline_id, bolt_id, pressure_anomalies, "pressure", sector_id)
+
+            return {
+                "detected_anomalies": anomaly_results,
+                "temperature_anomalies": temp_anomalies,
+                "pressure_anomalies": pressure_anomalies
+            }
+
+        return self.get_cached_or_fetch(cache_key, fetch)
+
+    def _analyze_correlation(self, pipeline_id, bolt_id):
+        cache_key = f"correlation_{pipeline_id}_{bolt_id}"
+
+        def fetch():
+            temp_data = self.fetch_timeseries_data("temperature", {
+                "pipeline_id": pipeline_id, "bolt_id": bolt_id, "limit": self.max_data_points
+            })
+            pressure_data = self.fetch_timeseries_data("pressure", {
+                "pipeline_id": pipeline_id, "bolt_id": bolt_id, "limit": self.max_data_points
+            })
+            temp_values = [point.get("temperature", 0) for point in temp_data]
+            pressure_values = [point.get("pressure", 0) for point in pressure_data]
+            correlation = self.analytics_engine.calculate_correlation(temp_values, pressure_values)
+            return {
+                "temperature_pressure_correlation": correlation,
+                "data_points": min(len(temp_values), len(pressure_values))
+            }
+
+        return self.get_cached_or_fetch(cache_key, fetch)
+
+    def _analyze_prediction(self, pipeline_id, bolt_id, sensor_type):
+        cache_key = f"prediction_{pipeline_id}_{bolt_id}_{sensor_type}"
+
+        def fetch():
+            pipelines = self.catalog_client.get_all_pipelines()
+            pipeline_data = pipelines.get(pipeline_id, {})
+            sector_id = pipeline_data.get("sector_id", "sector-unknown")
+
+            data = self.fetch_timeseries_data(sensor_type, {
+                "pipeline_id": pipeline_id, "bolt_id": bolt_id, "limit": 100
+            })
+            values = [point.get(sensor_type, 0) for point in data]
+            prediction = self.analytics_engine.predict_next_values(values)
+
+            alert = self.mqtt_publisher.publish_prediction_alert(
+                pipeline_id, bolt_id, prediction, sensor_type,
+                threshold=self.thresholds.get(sensor_type, {}).get("alert"),
+                sector_id=sector_id
+            )
+            return {
+                "sensor_type": sensor_type,
+                "current_values": values[-10:] if len(values) > 10 else values,
+                "prediction": prediction,
+                "alert_generated": alert is not None
+            }
+
+        return self.get_cached_or_fetch(cache_key, fetch)
+
+    def _analyze_custom_threshold(self, pipeline_id, bolt_id, params):
+        temp_threshold = params.get("temp_threshold", self.thresholds["temperature"]["alert"])
+        pressure_threshold = params.get("pressure_threshold", self.thresholds["pressure"]["alert"])
+
+        temp_data = self.fetch_timeseries_data("temperature", {
+            "pipeline_id": pipeline_id, "bolt_id": bolt_id, "limit": 500
+        })
+        pressure_data = self.fetch_timeseries_data("pressure", {
+            "pipeline_id": pipeline_id, "bolt_id": bolt_id, "limit": 500
+        })
+
+        return {
+            "analysis_type": "custom_threshold",
+            "pipeline_id": pipeline_id,
+            "bolt_id": bolt_id,
+            "thresholds": {"temperature": temp_threshold, "pressure": pressure_threshold},
+            "temperature_anomalies": self.analytics_engine.detect_anomaly_patterns(temp_data, "temperature", temp_threshold),
+            "pressure_anomalies": self.analytics_engine.detect_anomaly_patterns(pressure_data, "pressure", pressure_threshold)
+        }
+
+    def _analyze_batch(self, params):
+        pipelines = params.get("pipelines", [])
+        results = {}
+
+        for pipeline_id in pipelines:
+            pipeline_devices = self.catalog_client.get_pipeline_devices(pipeline_id)
+            pipeline_results = {}
+
+            for bolt in pipeline_devices.get("bolts", []):
+                bolt_id = bolt.get("id")
+                if bolt_id:
+                    temp_data = self.fetch_timeseries_data("temperature", {
+                        "pipeline_id": pipeline_id, "bolt_id": bolt_id, "limit": 100
+                    })
+                    if temp_data:
+                        values = [point.get("temperature", 0) for point in temp_data]
+                        pipeline_results[bolt_id] = {
+                            "statistics": self.analytics_engine.calculate_statistics(values),
+                            "trend": self.analytics_engine.calculate_trend(temp_data, "temperature")
+                        }
+
+            results[pipeline_id] = pipeline_results
+
+        return {"analysis_type": "batch", "results": results}
+
     def GET(self, *path, **query):
         try:
             if not path:
-                return self.json_response({
-                    "service": "Analytics Service v2.0",
-                    "status": "active",
-                    "features": {
-                        "mqtt_alerts": self.mqtt_publisher.connected,
-                        "resource_catalog": self.catalog_client.registered,
-                        "real_time_monitoring": self.monitoring_enabled
-                    },
-                    "endpoints": {
-                        "analysis": {
-                            "trend": "/trend?pipeline_id={pipeline_id}&bolt_id={bolt_id}",
-                            "statistics": "/statistics?pipeline_id={pipeline_id}&bolt_id={bolt_id}",
-                            "anomalies": "/anomalies?pipeline_id={pipeline_id}&bolt_id={bolt_id}",
-                            "correlation": "/correlation?pipeline_id={pipeline_id}&bolt_id={bolt_id}",
-                            "prediction": "/prediction?pipeline_id={pipeline_id}&bolt_id={bolt_id}&sensor={sensor}",
-                            "risk": "/risk?pipeline_id={pipeline_id}&bolt_id={bolt_id}"
-                        },
-                        "monitoring": {
-                            "health": "/health",
-                            "status": "/status",
-                            "alerts": "/alerts",
-                            "summary": "/summary"
-                        },
-                        "management": {
-                            "cache": "PUT /cache?action=clear",
-                            "monitoring": "PUT /monitoring?action=start|stop",
-                            "thresholds": "PUT /thresholds"
-                        }
-                    }
-                })
-            
+                cherrypy.response.status = 404
+                return self.json_response({"error": "Endpoint not found"})
+
             endpoint = path[0]
-            
+
             if endpoint == "health":
                 return self.json_response({
                     "status": "healthy",
@@ -315,263 +475,27 @@ class AnalyticsWebService(object):
                         "cache_size": len(self.cache)
                     }
                 })
-            
-            elif endpoint == "status":
-                return self.json_response({
-                    "service": "Analytics Service",
-                    "version": "2.0",
-                    "uptime": time.time(),
-                    "monitoring_enabled": self.monitoring_enabled,
-                    "monitoring_interval": self.monitoring_interval,
-                    "thresholds": self.thresholds,
-                    "cache_ttl": self.cache_ttl,
-                    "max_data_points": self.max_data_points
-                })
-            
-            elif endpoint == "trend":
-                pipeline_id = query.get("pipeline_id")
-                bolt_id = query.get("bolt_id")
-                
-                if not pipeline_id or not bolt_id:
-                    cherrypy.response.status = 400
-                    return self.json_response({"error": "pipeline_id and bolt_id required"})
-                
-                cache_key = f"trend_{pipeline_id}_{bolt_id}"
-                
-                def fetch_trend_data():
-                    temp_data = self.fetch_timeseries_data("temperature", {
-                        "pipeline_id": pipeline_id,
-                        "bolt_id": bolt_id,
-                        "limit": 100
-                    })
-                    pressure_data = self.fetch_timeseries_data("pressure", {
-                        "pipeline_id": pipeline_id,
-                        "bolt_id": bolt_id,
-                        "limit": 100
-                    })
-                    
-                    temp_trend = self.analytics_engine.calculate_trend(temp_data, "temperature")
-                    pressure_trend = self.analytics_engine.calculate_trend(pressure_data, "pressure")
-                    
-                    return {
-                        "pipeline_id": pipeline_id,
-                        "bolt_id": bolt_id,
-                        "temperature_trend": temp_trend,
-                        "pressure_trend": pressure_trend,
-                        "analysis_timestamp": time.time()
-                    }
-                
-                return self.json_response(self.get_cached_or_fetch(cache_key, fetch_trend_data))
-            
-            elif endpoint == "statistics":
-                pipeline_id = query.get("pipeline_id")
-                bolt_id = query.get("bolt_id")
-                
-                if not pipeline_id or not bolt_id:
-                    cherrypy.response.status = 400
-                    return self.json_response({"error": "pipeline_id and bolt_id required"})
-                
-                cache_key = f"stats_{pipeline_id}_{bolt_id}"
-                
-                def fetch_stats_data():
-                    temp_data = self.fetch_timeseries_data("temperature", {
-                        "pipeline_id": pipeline_id,
-                        "bolt_id": bolt_id,
-                        "limit": self.max_data_points
-                    })
-                    pressure_data = self.fetch_timeseries_data("pressure", {
-                        "pipeline_id": pipeline_id,
-                        "bolt_id": bolt_id,
-                        "limit": self.max_data_points
-                    })
-                    
-                    temp_values = [point.get("temperature", 0) for point in temp_data]
-                    pressure_values = [point.get("pressure", 0) for point in pressure_data]
-                    
-                    return {
-                        "pipeline_id": pipeline_id,
-                        "bolt_id": bolt_id,
-                        "temperature_stats": self.analytics_engine.calculate_statistics(temp_values),
-                        "pressure_stats": self.analytics_engine.calculate_statistics(pressure_values),
-                        "analysis_timestamp": time.time()
-                    }
-                
-                return self.json_response(self.get_cached_or_fetch(cache_key, fetch_stats_data))
-            
-            elif endpoint == "anomalies":
-                pipeline_id = query.get("pipeline_id")
-                bolt_id = query.get("bolt_id")
-                
-                if not pipeline_id or not bolt_id:
-                    cherrypy.response.status = 400
-                    return self.json_response({"error": "pipeline_id and bolt_id required"})
-                
-                cache_key = f"anomalies_{pipeline_id}_{bolt_id}"
-                
-                def fetch_anomaly_data():
-                    pipelines = self.catalog_client.get_all_pipelines()
-                    pipeline_data = pipelines.get(pipeline_id, {})
-                    sector_id = pipeline_data.get("sector_id", "sector-unknown")
 
-                    temp_data = self.fetch_timeseries_data("temperature", {
-                        "pipeline_id": pipeline_id,
-                        "bolt_id": bolt_id,
-                        "limit": self.max_data_points
-                    })
-                    pressure_data = self.fetch_timeseries_data("pressure", {
-                        "pipeline_id": pipeline_id,
-                        "bolt_id": bolt_id,
-                        "limit": self.max_data_points
-                    })
-                    # point are 
-                    temp_values = [point.get("temperature", 0) for point in temp_data] if temp_data else []
-                    pressure_values = [point.get("pressure", 0) for point in pressure_data] if pressure_data else []
-
-                    anomaly_results = []
-                    if temp_values and pressure_values:
-                        for i, (temp, pressure) in enumerate(zip(temp_values[-10:], pressure_values[-10:])):
-                            result = self.anomaly_detector.detect_anomaly(
-                                pipeline_id, bolt_id, temp, pressure
-                            )
-                            if result.is_anomaly:
-                                anomaly_results.append({
-                                    "index": i,
-                                    "type": result.anomaly_type.value if result.anomaly_type else "unknown",
-                                    "severity": result.severity.value if result.severity else "unknown",
-                                    "description": result.description,
-                                    "confidence": result.confidence,
-                                    "recommendations": result.recommendations,
-                                    "temperature": temp,
-                                    "pressure": pressure
-                                })
-
-                    temp_anomalies = self.analytics_engine.detect_anomaly_patterns(
-                        temp_data, "temperature", self.thresholds["temperature"]["alert"]
-                    )
-                    pressure_anomalies = self.analytics_engine.detect_anomaly_patterns(
-                        pressure_data, "pressure", self.thresholds["pressure"]["alert"]
-                    )
-
-                    if temp_anomalies.get("severity") in ["high", "critical"]:
-                        self.mqtt_publisher.publish_anomaly_alert(
-                            pipeline_id, bolt_id, temp_anomalies, "temperature", sector_id
-                        )
-
-                    if pressure_anomalies.get("severity") in ["high", "critical"]:
-                        self.mqtt_publisher.publish_anomaly_alert(
-                            pipeline_id, bolt_id, pressure_anomalies, "pressure", sector_id
-                        )
-                    
-                    return {
-                        "pipeline_id": pipeline_id,
-                        "bolt_id": bolt_id,
-                        "detected_anomalies": anomaly_results,
-                        "temperature_anomalies": temp_anomalies,
-                        "pressure_anomalies": pressure_anomalies,
-                        "analysis_timestamp": time.time()
-                    }
-                
-                return self.json_response(self.get_cached_or_fetch(cache_key, fetch_anomaly_data))
-            
-            elif endpoint == "correlation":
-                pipeline_id = query.get("pipeline_id")
-                bolt_id = query.get("bolt_id")
-                
-                if not pipeline_id or not bolt_id:
-                    cherrypy.response.status = 400
-                    return self.json_response({"error": "pipeline_id and bolt_id required"})
-                
-                cache_key = f"correlation_{pipeline_id}_{bolt_id}"
-                
-                def fetch_correlation_data():
-                    temp_data = self.fetch_timeseries_data("temperature", {
-                        "pipeline_id": pipeline_id,
-                        "bolt_id": bolt_id,
-                        "limit": self.max_data_points
-                    })
-                    pressure_data = self.fetch_timeseries_data("pressure", {
-                        "pipeline_id": pipeline_id,
-                        "bolt_id": bolt_id,
-                        "limit": self.max_data_points
-                    })
-                    
-                    temp_values = [point.get("temperature", 0) for point in temp_data]
-                    pressure_values = [point.get("pressure", 0) for point in pressure_data]
-                    
-                    correlation = self.analytics_engine.calculate_correlation(temp_values, pressure_values)
-                    
-                    return {
-                        "pipeline_id": pipeline_id,
-                        "bolt_id": bolt_id,
-                        "temperature_pressure_correlation": correlation,
-                        "data_points": min(len(temp_values), len(pressure_values)),
-                        "analysis_timestamp": time.time()
-                    }
-                
-                return self.json_response(self.get_cached_or_fetch(cache_key, fetch_correlation_data))
-            
-            elif endpoint == "prediction":
-                pipeline_id = query.get("pipeline_id")
-                bolt_id = query.get("bolt_id")
-                sensor_type = query.get("sensor", "temperature")
-                
-                if not pipeline_id or not bolt_id:
-                    cherrypy.response.status = 400
-                    return self.json_response({"error": "pipeline_id and bolt_id required"})
-                
-                cache_key = f"prediction_{pipeline_id}_{bolt_id}_{sensor_type}"
-                
-                def fetch_prediction_data():
-                    data = self.fetch_timeseries_data(sensor_type, {
-                        "pipeline_id": pipeline_id,
-                        "bolt_id": bolt_id,
-                        "limit": 100
-                    })
-                    
-                    values = [point.get(sensor_type, 0) for point in data]
-                    prediction = self.analytics_engine.predict_next_values(values)
-                    
-                    alert = self.mqtt_publisher.publish_prediction_alert(
-                        pipeline_id, bolt_id, prediction, sensor_type,
-                        threshold=self.thresholds.get(sensor_type, {}).get("alert")
-                    )
-                    
-                    return {
-                        "pipeline_id": pipeline_id,
-                        "bolt_id": bolt_id,
-                        "sensor_type": sensor_type,
-                        "current_values": values[-10:] if len(values) > 10 else values,
-                        "prediction": prediction,
-                        "alert_generated": alert is not None,
-                        "analysis_timestamp": time.time()
-                    }
-                
-                return self.json_response(self.get_cached_or_fetch(cache_key, fetch_prediction_data))
-            
             elif endpoint == "risk":
                 pipeline_id = query.get("pipeline_id")
                 bolt_id = query.get("bolt_id")
-                
+
                 if not pipeline_id or not bolt_id:
                     cherrypy.response.status = 400
                     return self.json_response({"error": "pipeline_id and bolt_id required"})
-                
+
                 cache_key = f"risk_{pipeline_id}_{bolt_id}"
-                
+
                 def fetch_risk_data():
                     pipelines = self.catalog_client.get_all_pipelines()
                     pipeline_data = pipelines.get(pipeline_id, {})
                     sector_id = pipeline_data.get("sector_id", "sector-unknown")
 
                     temp_data = self.fetch_timeseries_data("temperature", {
-                        "pipeline_id": pipeline_id,
-                        "bolt_id": bolt_id,
-                        "limit": 200
+                        "pipeline_id": pipeline_id, "bolt_id": bolt_id, "limit": 200
                     })
                     pressure_data = self.fetch_timeseries_data("pressure", {
-                        "pipeline_id": pipeline_id,
-                        "bolt_id": bolt_id,
-                        "limit": 200
+                        "pipeline_id": pipeline_id, "bolt_id": bolt_id, "limit": 200
                     })
 
                     temp_values = [point.get("temperature", 0) for point in temp_data]
@@ -594,7 +518,7 @@ class AnalyticsWebService(object):
 
                     if risk_data["risk_level"] in ["high", "critical"]:
                         self.mqtt_publisher.publish_risk_alert(pipeline_id, bolt_id, risk_data, sector_id)
-                    
+
                     return {
                         "pipeline_id": pipeline_id,
                         "bolt_id": bolt_id,
@@ -604,13 +528,13 @@ class AnalyticsWebService(object):
                         "pressure_stats": pressure_stats,
                         "analysis_timestamp": time.time()
                     }
-                
+
                 return self.json_response(self.get_cached_or_fetch(cache_key, fetch_risk_data))
-            
+
             elif endpoint == "summary":
                 pipelines = self.catalog_client.get_all_pipelines()
                 summary = {}
-                
+
                 for pipeline_id in pipelines.keys():
                     pipeline_devices = self.catalog_client.get_pipeline_devices(pipeline_id)
                     pipeline_summary = {
@@ -618,7 +542,7 @@ class AnalyticsWebService(object):
                         "overall_health": "unknown",
                         "alerts_count": 0
                     }
-                    
+
                     for bolt in pipeline_devices.get("bolts", []):
                         bolt_id = bolt.get("id")
                         if bolt_id:
@@ -628,16 +552,16 @@ class AnalyticsWebService(object):
                                 "status": bolt.get("status", "unknown")
                             }
                             pipeline_summary["bolts"][bolt_id] = bolt_summary
-                    
+
                     summary[pipeline_id] = pipeline_summary
-                
+
                 return self.json_response({
                     "pipelines_summary": summary,
                     "total_pipelines": len(summary),
                     "monitoring_active": self.monitoring_enabled,
                     "timestamp": time.time()
                 })
-            
+
             elif endpoint == "alerts":
                 limit = int(query.get("limit", 50))
                 pipeline_id = query.get("pipeline_id")
@@ -653,11 +577,115 @@ class AnalyticsWebService(object):
                     },
                     "timestamp": time.time()
                 })
-            
+
+            elif endpoint == "prediction":
+                pipeline_id = query.get("pipeline_id")
+                bolt_id = query.get("bolt_id")
+                sensor = query.get("sensor", "temperature")
+
+                if not pipeline_id or not bolt_id:
+                    cherrypy.response.status = 400
+                    return self.json_response({"error": "pipeline_id and bolt_id required"})
+
+                result = self._analyze_prediction(pipeline_id, bolt_id, sensor)
+                return self.json_response(result)
+
+            elif endpoint == "statistics":
+                pipeline_id = query.get("pipeline_id")
+                bolt_id = query.get("bolt_id")
+                sensor = query.get("sensor", "temperature")
+                hours = int(query.get("hours", 24))
+
+                if not pipeline_id or not bolt_id:
+                    cherrypy.response.status = 400
+                    return self.json_response({"error": "pipeline_id and bolt_id required"})
+
+                cache_key = f"statistics_{pipeline_id}_{bolt_id}_{sensor}_{hours}"
+
+                def fetch_statistics():
+                    data = self.fetch_timeseries_data(sensor, {
+                        "pipeline_id": pipeline_id, "bolt_id": bolt_id,
+                        "limit": self.max_data_points, "hours": hours
+                    })
+                    values = [point.get(sensor, 0) for point in data if point.get(sensor) is not None]
+                    if not values:
+                        return {
+                            "pipeline_id": pipeline_id, "bolt_id": bolt_id,
+                            "sensor": sensor, "hours": hours,
+                            "statistics": None, "message": "No data available"
+                        }
+                    stats = self.analytics_engine.calculate_statistics(values)
+                    last_point = data[0] if data else {}
+                    last_ts = last_point.get("time")
+                    stats["last_value"] = round(values[0], 2) if values else 0
+                    stats["last_timestamp"] = last_ts
+                    return {
+                        "pipeline_id": pipeline_id, "bolt_id": bolt_id,
+                        "sensor": sensor, "hours": hours, "statistics": stats
+                    }
+
+                return self.json_response(self.get_cached_or_fetch(cache_key, fetch_statistics))
+
+            elif endpoint == "aggregated":
+                measurement = query.get("measurement", "temperature")
+                aggregation = query.get("aggregation", "mean")
+                pipeline_id = query.get("pipeline_id")
+                hours = int(query.get("hours", 24))
+                window = query.get("window", "1h")
+
+                cache_key = f"aggregated_{measurement}_{aggregation}_{pipeline_id}_{hours}"
+
+                def fetch_aggregated():
+                    params = {"limit": self.max_data_points, "hours": hours}
+                    if pipeline_id:
+                        params["pipeline_id"] = pipeline_id
+                    data = self.fetch_timeseries_data(measurement, params)
+                    values = [point.get(measurement, 0) for point in data if point.get(measurement) is not None]
+                    agg_fns = {
+                        "mean": lambda v: sum(v) / len(v) if v else 0,
+                        "min": lambda v: min(v) if v else 0,
+                        "max": lambda v: max(v) if v else 0,
+                        "count": lambda v: len(v),
+                    }
+                    fn = agg_fns.get(aggregation, agg_fns["mean"])
+                    result_data = []
+                    if values:
+                        result_data = [{"time": time.time(), "value": round(fn(values), 2),
+                                        "pipeline_id": pipeline_id, "bolt_id": None}]
+                    return {
+                        "measurement": measurement, "aggregation": aggregation,
+                        "window": window, "pipeline_id": pipeline_id,
+                        "count": len(result_data), "data": result_data
+                    }
+
+                return self.json_response(self.get_cached_or_fetch(cache_key, fetch_aggregated))
+
+            elif endpoint == "anomalies":
+                pipeline_id = query.get("pipeline_id")
+                bolt_id = query.get("bolt_id")
+
+                if not pipeline_id or not bolt_id:
+                    cherrypy.response.status = 400
+                    return self.json_response({"error": "pipeline_id and bolt_id required"})
+
+                result = self._analyze_anomalies(pipeline_id, bolt_id)
+                return self.json_response(result)
+
+            elif endpoint == "trend":
+                pipeline_id = query.get("pipeline_id")
+                bolt_id = query.get("bolt_id")
+
+                if not pipeline_id or not bolt_id:
+                    cherrypy.response.status = 400
+                    return self.json_response({"error": "pipeline_id and bolt_id required"})
+
+                result = self._analyze_trend(pipeline_id, bolt_id)
+                return self.json_response(result)
+
             else:
                 cherrypy.response.status = 404
                 return self.json_response({"error": f"Endpoint '{endpoint}' not found"})
-                
+
         except Exception as e:
             logger.error(f"GET error: {e}")
             cherrypy.response.status = 500
@@ -668,149 +696,77 @@ class AnalyticsWebService(object):
             if not path:
                 cherrypy.response.status = 400
                 return self.json_response({"error": "Endpoint required"})
-            
+
             endpoint = path[0]
             input_data = json.loads(cherrypy.request.body.read())
-            
+
             if endpoint == "analyze":
-                analysis_type = input_data.get("type")
+                analysis_types = input_data.get("types", [])
+                if not analysis_types:
+                    analysis_type = input_data.get("type")
+                    if analysis_type:
+                        analysis_types = [analysis_type]
+                    else:
+                        cherrypy.response.status = 400
+                        return self.json_response({"error": "types array or type field required"})
+
+                pipeline_id = input_data.get("pipeline_id", input_data.get("params", {}).get("pipeline_id"))
+                bolt_id = input_data.get("bolt_id", input_data.get("params", {}).get("bolt_id"))
                 params = input_data.get("params", {})
-                
-                if analysis_type == "custom_threshold":
-                    pipeline_id = params.get("pipeline_id")
-                    bolt_id = params.get("bolt_id")
-                    temp_threshold = params.get("temp_threshold", self.thresholds["temperature"]["alert"])
-                    pressure_threshold = params.get("pressure_threshold", self.thresholds["pressure"]["alert"])
-                    
-                    temp_data = self.fetch_timeseries_data("temperature", {
-                        "pipeline_id": pipeline_id,
-                        "bolt_id": bolt_id,
-                        "limit": 500
-                    })
-                    pressure_data = self.fetch_timeseries_data("pressure", {
-                        "pipeline_id": pipeline_id,
-                        "bolt_id": bolt_id,
-                        "limit": 500
-                    })
-                    
-                    temp_anomalies = self.analytics_engine.detect_anomaly_patterns(
-                        temp_data, "temperature", temp_threshold
-                    )
-                    pressure_anomalies = self.analytics_engine.detect_anomaly_patterns(
-                        pressure_data, "pressure", pressure_threshold
-                    )
-                    
-                    return self.json_response({
-                        "analysis_type": "custom_threshold",
-                        "pipeline_id": pipeline_id,
-                        "bolt_id": bolt_id,
-                        "thresholds": {
-                            "temperature": temp_threshold,
-                            "pressure": pressure_threshold
-                        },
-                        "temperature_anomalies": temp_anomalies,
-                        "pressure_anomalies": pressure_anomalies,
-                        "timestamp": time.time()
-                    })
-                
-                elif analysis_type == "batch":
-                    pipelines = params.get("pipelines", [])
-                    results = {}
-                    
-                    for pipeline_id in pipelines:
-                        pipeline_devices = self.catalog_client.get_pipeline_devices(pipeline_id)
-                        pipeline_results = {}
-                        
-                        for bolt in pipeline_devices.get("bolts", []):
-                            bolt_id = bolt.get("id")
-                            if bolt_id:
-                                temp_data = self.fetch_timeseries_data("temperature", {
-                                    "pipeline_id": pipeline_id,
-                                    "bolt_id": bolt_id,
-                                    "limit": 100
-                                })
-                                
-                                if temp_data:
-                                    values = [point.get("temperature", 0) for point in temp_data]
-                                    stats = self.analytics_engine.calculate_statistics(values)
-                                    trend = self.analytics_engine.calculate_trend(temp_data, "temperature")
-                                    
-                                    pipeline_results[bolt_id] = {
-                                        "statistics": stats,
-                                        "trend": trend
-                                    }
-                        
-                        results[pipeline_id] = pipeline_results
-                    
-                    return self.json_response({
-                        "analysis_type": "batch",
-                        "results": results,
-                        "timestamp": time.time()
-                    })
-                
-                else:
-                    cherrypy.response.status = 400
-                    return self.json_response({"error": "Invalid analysis type"})
-            
+                sensor_type = input_data.get("sensor", "temperature")
+
+                valid_types = ["trend", "statistics", "anomalies", "correlation", "prediction", "custom_threshold", "batch"]
+                results = {}
+
+                for a_type in analysis_types:
+                    if a_type not in valid_types:
+                        results[a_type] = {"error": f"Unknown analysis type: {a_type}"}
+                        continue
+
+                    if a_type == "batch":
+                        results["batch"] = self._analyze_batch(params)
+                        continue
+
+                    if a_type == "custom_threshold":
+                        results["custom_threshold"] = self._analyze_custom_threshold(
+                            pipeline_id or params.get("pipeline_id"),
+                            bolt_id or params.get("bolt_id"),
+                            params
+                        )
+                        continue
+
+                    if not pipeline_id or not bolt_id:
+                        results[a_type] = {"error": "pipeline_id and bolt_id required"}
+                        continue
+
+                    if a_type == "trend":
+                        results["trend"] = self._analyze_trend(pipeline_id, bolt_id)
+                    elif a_type == "statistics":
+                        results["statistics"] = self._analyze_statistics(pipeline_id, bolt_id)
+                    elif a_type == "anomalies":
+                        results["anomalies"] = self._analyze_anomalies(pipeline_id, bolt_id)
+                    elif a_type == "correlation":
+                        results["correlation"] = self._analyze_correlation(pipeline_id, bolt_id)
+                    elif a_type == "prediction":
+                        results["prediction"] = self._analyze_prediction(pipeline_id, bolt_id, sensor_type)
+
+                response = {
+                    "results": results,
+                    "analysis_timestamp": time.time()
+                }
+                if pipeline_id:
+                    response["pipeline_id"] = pipeline_id
+                if bolt_id:
+                    response["bolt_id"] = bolt_id
+
+                return self.json_response(response)
+
             else:
                 cherrypy.response.status = 404
                 return self.json_response({"error": f"POST endpoint '{endpoint}' not found"})
-                
+
         except Exception as e:
             logger.error(f"POST error: {e}")
-            cherrypy.response.status = 500
-            return self.json_response({"error": str(e)})
-    
-    def PUT(self, *path, **query):
-        try:
-            if not path:
-                cherrypy.response.status = 400
-                return self.json_response({"error": "Endpoint required"})
-            
-            endpoint = path[0]
-            
-            if endpoint == "cache":
-                action = query.get("action")
-                
-                if action == "clear":
-                    self.cache.clear()
-                    return self.json_response({
-                        "message": "Cache cleared",
-                        "timestamp": time.time()
-                    })
-                else:
-                    cherrypy.response.status = 400
-                    return self.json_response({"error": "Invalid action for cache"})
-            
-            elif endpoint == "thresholds":
-                input_data = json.loads(cherrypy.request.body.read())
-                
-                if "temperature" in input_data:
-                    self.thresholds["temperature"].update(input_data["temperature"])
-                if "pressure" in input_data:
-                    self.thresholds["pressure"].update(input_data["pressure"])
-                
-                return self.json_response({
-                    "message": "Thresholds updated",
-                    "thresholds": self.thresholds
-                })
-            
-            else:
-                cherrypy.response.status = 404
-                return self.json_response({"error": f"PUT endpoint '{endpoint}' not found"})
-                
-        except Exception as e:
-            logger.error(f"PUT error: {e}")
-            cherrypy.response.status = 500
-            return self.json_response({"error": str(e)})
-    
-    def DELETE(self, *path, **query):
-        try:
-            cherrypy.response.status = 405
-            return self.json_response({"error": "DELETE operations not supported"})
-            
-        except Exception as e:
-            logger.error(f"DELETE error: {e}")
             cherrypy.response.status = 500
             return self.json_response({"error": str(e)})
 
@@ -822,7 +778,7 @@ def main():
     cherrypy.config.update({
         'server.socket_host': host,
         'server.socket_port': port,
-        'engine.autoreload.on': False  
+        'engine.autoreload.on': False
     })
 
     app_config = {
@@ -831,8 +787,8 @@ def main():
             'tools.response_headers.on': True,
             'tools.response_headers.headers': [
                 ('Content-Type', 'application/json'),
-                ('Access-Control-Allow-Origin', '*'),  # TODO: restrict in production
-                ('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE'),
+                ('Access-Control-Allow-Origin', '*'),
+                ('Access-Control-Allow-Methods', 'GET, POST'),
                 ('Access-Control-Allow-Headers', 'Content-Type')
             ]
         }
@@ -841,7 +797,7 @@ def main():
     service = AnalyticsWebService()
 
     logger.info(f"Starting Analytics Service v2.0 on {host}:{port}")
-    logger.info("Features: MQTT Alerts, Resource Catalog Integration, Real-time Monitoring")
+    logger.info("Endpoints: GET /health, /risk, /summary, /alerts | POST /analyze")
 
     cherrypy.quickstart(service, '/', app_config)
 

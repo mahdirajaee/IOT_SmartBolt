@@ -11,10 +11,11 @@ logger = logging.getLogger(__name__)
 
 
 class MQTTPublisher:
-    def __init__(self, broker="localhost", port=1883):
+    def __init__(self, broker="localhost", port=1883, catalog_client=None):
         self.broker = broker
         self.port = port
         self.client_id = "analytics_publisher"
+        self.catalog_client = catalog_client
 
         self.mqtt = MyMQTT(self.client_id, self.broker, self.port, self)
         self.connected = False
@@ -51,9 +52,13 @@ class MQTTPublisher:
     def _publish_alert(self, alert):
         try:
             sector_id = alert.get('sector_id', 'sector-unknown')
+            if self.catalog_client:
+                alert['recipient_chat_ids'] = self.catalog_client.get_chat_ids_for_sector(sector_id)
+            else:
+                alert['recipient_chat_ids'] = []
             topic = f"sectors/{sector_id}/pipelines/{alert['pipeline_id']}/alerts/{alert['alert_type']}"
             self.mqtt.myPublish(topic, alert)
-            logger.info(f"Alert published to {topic}")
+            logger.info(f"Alert published to {topic} for {len(alert['recipient_chat_ids'])} recipients")
         except Exception as e:
             logger.error(f"Error publishing alert: {e}")
 
@@ -106,7 +111,7 @@ class MQTTPublisher:
         return alert
 
     def publish_prediction_alert(self, pipeline_id, bolt_id, prediction_data, sensor_type, threshold=None, sector_id="sector-unknown"):
-        predictions = prediction_data.get("predictions", [])
+        predictions = prediction_data.get("next_values", [])
         if not predictions:
             return None
 
