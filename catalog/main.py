@@ -2,6 +2,7 @@ import cherrypy
 import json
 import os
 import logging
+import requests
 from dotenv import load_dotenv
 from service_registry import ServiceRegistry
 from device_manager import DeviceManager
@@ -13,7 +14,7 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 logger = logging.getLogger(__name__)
 
 class ResourceCatalogWebService(object):
-    
+
     exposed = True
 
     def __init__(self):
@@ -21,79 +22,62 @@ class ResourceCatalogWebService(object):
         self.device_manager = DeviceManager(data_file=catalog_file)
         self.service_registry = ServiceRegistry(device_manager=self.device_manager)
         self.config_manager = ConfigurationManager()
+        self.account_manager_url = os.getenv("ACCOUNT_MANAGER_URL", "http://localhost:8084")
         self.service_registry.start_health_checks()
 
     def json_response(self, data):
         return json.dumps(data).encode('utf-8')
 
-    def GET(self, *path, **query):
-        # not sure if we need all these endpoints
+    def _proxy_account_manager(self, endpoint, params=None):
         try:
-            #print(f"GET {path}")  # debug
+            response = requests.get(
+                f"{self.account_manager_url}/internal/{endpoint}",
+                params=params,
+                timeout=5
+            )
+            if response.status_code == 200:
+                return response.json()
+            return {"error": f"Account manager returned {response.status_code}"}
+        except Exception as e:
+            logger.error(f"Failed to proxy to account manager: {e}")
+            return {"error": "Account manager unavailable"}
+
+    def GET(self, *path, **query):
+        try:
             if not path:
                 return self.json_response({
                     "service": "Resource Catalog",
                     "status": "active",
                     "endpoints": {
-                        "catalog": {
-                            "full": "/catalog",
-                            "broker": "/broker"
-                        },
                         "services": {
-                            "list": "/services",
-                            "register": "POST /services",
-                            "health": "/services/health",
-                            "by_name": "/services/{name}"
+                            "list_and_health": "GET /services",
+                            "register": "POST /services/register"
                         },
-                        "devices": {
-                            "list": "/devices",
-                            "pipelines": "/devices/pipelines",
-                            "bolts": "/devices/bolts",
-                            "valves": "/devices/valves",
-                            "by_pipeline": "/devices/pipeline/{id}"
+                        "pipelines": {
+                            "list": "GET /pipelines",
+                            "detail": "GET /pipelines/{id}",
+                            "create": "POST /pipelines",
+                            "update": "PUT /pipelines/{id}",
+                            "delete": "DELETE /pipelines/{id}"
                         },
-                        "pipeline_bundles": {
-                            "list": "/pipelines/bundle",
-                            "get": "/pipelines/bundle/{id}",
-                            "create": "POST /pipelines/bundle",
-                            "update": "PUT /pipelines/bundle/{id}",
-                            "delete": "DELETE /pipelines/bundle/{id}"
+                        "bolts": {
+                            "update": "PUT /bolts/{id}"
                         },
                         "users": {
-                            "list": "/users",
-                            "get": "/users/{id}",
-                            "create": "POST /users",
-                            "update": "PUT /users/{id}",
-                            "delete": "DELETE /users/{id}"
+                            "list": "GET /users",
+                            "get": "GET /users/{id}"
                         },
                         "sectors": {
-                            "list": "/sectors",
-                            "get": "/sectors/{id}"
+                            "list": "GET /sectors"
                         },
-                        "config": {
-                            "global": "/config/global",
-                            "thresholds": "/config/thresholds",
-                            "control_rules": "/config/rules",
-                            "service": "/config/service/{name}"
-                        }
+                        "config": "GET /config[?section=global|thresholds|rules]"
                     }
                 })
 
             resource = path[0]
 
-            if resource == "catalog":
-                return self.json_response(self.device_manager.get_full_catalog())
-
-            elif resource == "broker":
-                return self.json_response({"broker": self.device_manager.get_broker_config()})
-
-            elif resource == "services":
+            if resource == "services":
                 if len(path) == 1:
-                    return self.json_response({
-                        "services": self.service_registry.get_all_services()
-                    })
-
-                elif path[1] == "health":
                     services = self.service_registry.get_all_services()
                     health_status = {
                         sid: {
@@ -103,127 +87,67 @@ class ResourceCatalogWebService(object):
                         }
                         for sid, service in services.items()
                     }
-                    return self.json_response({"health_status": health_status})
+                    return self.json_response({
+                        "services": services,
+                        "health_status": health_status
+                    })
+                elif len(path) > 1 and path[1] != "register":
+                    cherrypy.response.status = 404
+                    return self.json_response({"error": f"Endpoint '/services/{path[1]}' not found"})
 
-                else:
-                    service_name = path[1]
-                    services = self.service_registry.get_services_by_name(service_name)
-                    if services:
-                        return self.json_response({"services": services})
-                    else:
-                        cherrypy.response.status = 404
-                        return self.json_response({"error": f"Service '{service_name}' not found"})
-
-            elif resource == "devices":
+            elif resource == "pipelines":
                 if len(path) == 1:
                     return self.json_response({
-                        "devices": self.device_manager.get_all_devices()
+                        "pipelines": self.device_manager.get_all_devices("pipelines"),
+                        "pipeline_bundles": self.device_manager.get_all_pipeline_bundles()
                     })
-
-                elif path[1] == "pipelines":
-                    return self.json_response({
-                        "pipelines": self.device_manager.get_all_devices("pipelines")
-                    })
-
-                elif path[1] == "bolts":
-                    return self.json_response({
-                        "bolts": self.device_manager.get_all_devices("bolts")
-                    })
-
-                elif path[1] == "valves":
-                    return self.json_response({
-                        "valves": self.device_manager.get_all_devices("valves")
-                    })
-
-                elif path[1] == "pipeline" and len(path) > 2:
-                    pipeline_id = path[2]
+                elif len(path) == 2:
+                    pipeline_id = path[1]
                     devices = self.device_manager.get_pipeline_devices(pipeline_id)
                     if devices:
+                        bundle = self.device_manager.get_pipeline_bundle(pipeline_id)
+                        if bundle:
+                            devices["pipeline_bundle"] = bundle
                         return self.json_response(devices)
                     else:
                         cherrypy.response.status = 404
                         return self.json_response({"error": f"Pipeline '{pipeline_id}' not found"})
 
-            elif resource == "pipelines":
-                if len(path) >= 2 and path[1] == "bundle":
-                    if len(path) == 2:
-                        bundles = self.device_manager.get_all_pipeline_bundles()
-                        return self.json_response({"pipeline_bundles": bundles})
-                    elif len(path) == 3:
-                        pipeline_id = path[2]
-                        bundle = self.device_manager.get_pipeline_bundle(pipeline_id)
-                        if bundle:
-                            return self.json_response({"pipeline_bundle": bundle})
-                        else:
-                            cherrypy.response.status = 404
-                            return self.json_response({"error": f"Pipeline bundle '{pipeline_id}' not found"})
-
             elif resource == "users":
                 if len(path) == 1:
-                    return self.json_response({"users": self.device_manager.get_users()})
+                    return self.json_response(self._proxy_account_manager("users"))
                 elif len(path) == 2:
-                    try:
-                        user_id = int(path[1])
-                        user = self.device_manager.get_user(user_id)
-                        if user:
-                            return self.json_response({"user": user})
-                        else:
-                            cherrypy.response.status = 404
-                            return self.json_response({"error": f"User '{user_id}' not found"})
-                    except ValueError:
-                        user = self.device_manager.get_user_by_name(path[1])
-                        if user:
-                            return self.json_response({"user": user})
-                        else:
-                            cherrypy.response.status = 404
-                            return self.json_response({"error": f"User '{path[1]}' not found"})
+                    return self.json_response(self._proxy_account_manager(f"users/{path[1]}"))
 
             elif resource == "sectors":
                 if len(path) == 1:
                     return self.json_response({"sectors": self.device_manager.get_sectors()})
-                elif len(path) == 2:
-                    sector_id = path[1]
-                    sector = self.device_manager.get_sector(sector_id)
-                    if sector:
-                        return self.json_response({"sector": sector})
-                    else:
-                        cherrypy.response.status = 404
-                        return self.json_response({"error": f"Sector '{sector_id}' not found"})
 
             elif resource == "config":
-                if len(path) == 1:
-                    return self.json_response({
-                        "configurations": self.config_manager.get_all_configurations()
-                    })
-
-                elif path[1] == "global":
+                if len(path) > 1:
+                    cherrypy.response.status = 404
+                    return self.json_response({"error": f"Use /config?section= instead of /config/{path[1]}"})
+                section = query.get("section")
+                if section == "global":
                     return self.json_response({
                         "global_config": self.config_manager.get_global_config()
                     })
-
-                elif path[1] == "thresholds":
+                elif section == "thresholds":
                     sensor_type = query.get("type")
                     return self.json_response({
                         "thresholds": self.config_manager.get_thresholds(sensor_type)
                     })
-
-                elif path[1] == "rules":
+                elif section == "rules":
                     rule_name = query.get("name")
                     return self.json_response({
                         "control_rules": self.config_manager.get_control_rules(rule_name)
                     })
-
-                elif path[1] == "service" and len(path) > 2:
-                    service_name = path[2]
-                    config = self.config_manager.get_service_config(service_name)
+                else:
                     return self.json_response({
-                        "service": service_name,
-                        "config": config
+                        "global_config": self.config_manager.get_global_config(),
+                        "thresholds": self.config_manager.get_thresholds(),
+                        "control_rules": self.config_manager.get_control_rules()
                     })
-
-                elif len(path) > 1:
-                    cherrypy.response.status = 404
-                    return self.json_response({"error": f"Config endpoint '{path[1]}' not found"})
 
             else:
                 cherrypy.response.status = 404
@@ -244,10 +168,8 @@ class ResourceCatalogWebService(object):
             input_data = json.loads(cherrypy.request.body.read())
 
             if resource == "services":
-                # TODO: maybe combine some of these?
                 if len(path) > 1 and path[1] == "register":
                     service_name = input_data.get("name")
-                    #print(f"registering {service_name}")  # debug
                     host = input_data.get("host", "localhost")
                     port = input_data.get("port")
                     health_endpoint = input_data.get("health_endpoint", "/health")
@@ -266,59 +188,8 @@ class ResourceCatalogWebService(object):
                         "service_id": service_id
                     })
 
-            elif resource == "devices":
-                device_type = input_data.get("type")
-
-                if device_type == "pipeline":
-                    pipeline_id = input_data.get("id")
-                    location = input_data.get("location", "")
-                    description = input_data.get("description", "")
-                    sector_id = input_data.get("sector_id", "")
-
-                    if not pipeline_id:
-                        cherrypy.response.status = 400
-                        return self.json_response({"error": "Pipeline ID required"})
-
-                    self.device_manager.register_pipeline(pipeline_id, location, description, sector_id)
-                    return self.json_response({
-                        "message": "Pipeline registered",
-                        "pipeline_id": pipeline_id
-                    })
-
-                elif device_type == "bolt":
-                    bolt_id = input_data.get("id")
-                    pipeline_id = input_data.get("pipeline_id")
-                    bolt_type = input_data.get("bolt_type", "temperature_pressure")
-                    location = input_data.get("location", "")
-
-                    if not bolt_id or not pipeline_id:
-                        cherrypy.response.status = 400
-                        return self.json_response({"error": "Bolt ID and pipeline ID required"})
-
-                    self.device_manager.register_bolt(bolt_id, pipeline_id, bolt_type, location)
-                    return self.json_response({
-                        "message": "Bolt registered",
-                        "bolt_id": bolt_id
-                    })
-
-                elif device_type == "valve":
-                    valve_id = input_data.get("id")
-                    pipeline_id = input_data.get("pipeline_id")
-                    location = input_data.get("location", "")
-                    normally_open = input_data.get("normally_open", True)
-
-                    if not valve_id or not pipeline_id:
-                        cherrypy.response.status = 400
-                        return self.json_response({"error": "Valve ID and pipeline ID required"})
-
-                    self.device_manager.register_valve(valve_id, pipeline_id, location, normally_open)
-                    return self.json_response({
-                        "message": "Valve registered",
-                        "valve_id": valve_id
-                    })
-
             elif resource == "pipelines":
-                if len(path) >= 2 and path[1] == "bundle":
+                if len(path) == 1:
                     pipeline_id = input_data.get("pipeline_id")
                     name = input_data.get("name", "")
                     location = input_data.get("location", "")
@@ -344,43 +215,6 @@ class ResourceCatalogWebService(object):
                         cherrypy.response.status = 409
                         return self.json_response({"error": f"Failed to create pipeline bundle '{pipeline_id}'. Pipeline may already exist."})
 
-            elif resource == "users":
-                user_name = input_data.get("userName")
-                user_id = input_data.get("userID")
-                chat_id = input_data.get("chatID")
-                password_hash = input_data.get("passwordHash")
-                sectors = input_data.get("sectors", [])
-
-                if not user_name or not user_id:
-                    cherrypy.response.status = 400
-                    return self.json_response({"error": "userName and userID required"})
-
-                success = self.device_manager.add_user(user_name, user_id, chat_id, sectors, password_hash)
-                if success:
-                    cherrypy.response.status = 201
-                    return self.json_response({
-                        "message": "User created successfully",
-                        "userID": user_id
-                    })
-                else:
-                    cherrypy.response.status = 409
-                    return self.json_response({"error": f"User with ID '{user_id}' already exists"})
-
-            elif resource == "config":
-                if len(path) > 1 and path[1] == "service":
-                    service_name = input_data.get("service")
-                    config = input_data.get("config")
-
-                    if not service_name or not config:
-                        cherrypy.response.status = 400
-                        return self.json_response({"error": "Service name and config required"})
-
-                    self.config_manager.set_service_config(service_name, config)
-                    return self.json_response({
-                        "message": "Service configuration set",
-                        "service": service_name
-                    })
-
             else:
                 cherrypy.response.status = 404
                 return self.json_response({"error": f"POST not supported for resource '{resource}'"})
@@ -399,43 +233,41 @@ class ResourceCatalogWebService(object):
             resource = path[0]
             input_data = json.loads(cherrypy.request.body.read())
 
-            if resource == "devices":
-                if len(path) > 1:
-                    device_type = path[1]
+            if resource == "bolts":
+                if len(path) >= 2:
+                    bolt_id = path[1]
+                    temperature = input_data.get("temperature")
+                    pressure = input_data.get("pressure")
 
-                    if device_type == "bolt" and len(path) > 2:
-                        bolt_id = path[2]
-                        temperature = input_data.get("temperature")
-                        pressure = input_data.get("pressure")
+                    success = self.device_manager.update_bolt_data(bolt_id, temperature, pressure)
+                    if success:
+                        return self.json_response({
+                            "message": "Bolt data updated",
+                            "bolt_id": bolt_id
+                        })
+                    else:
+                        cherrypy.response.status = 404
+                        return self.json_response({"error": f"Bolt '{bolt_id}' not found"})
 
-                        success = self.device_manager.update_bolt_data(bolt_id, temperature, pressure)
-                        if success:
-                            return self.json_response({
-                                "message": "Bolt data updated",
-                                "bolt_id": bolt_id
-                            })
-                        else:
-                            cherrypy.response.status = 404
-                            return self.json_response({"error": f"Bolt '{bolt_id}' not found"})
+            elif resource == "valves":
+                if len(path) >= 2:
+                    valve_id = path[1]
+                    state = input_data.get("state")
+                    command = input_data.get("command")
 
-                    elif device_type == "valve" and len(path) > 2:
-                        valve_id = path[2]
-                        state = input_data.get("state")
-                        command = input_data.get("command")
-
-                        success = self.device_manager.update_valve_state(valve_id, state, command)
-                        if success:
-                            return self.json_response({
-                                "message": "Valve state updated",
-                                "valve_id": valve_id
-                            })
-                        else:
-                            cherrypy.response.status = 404
-                            return self.json_response({"error": f"Valve '{valve_id}' not found"})
+                    success = self.device_manager.update_valve_state(valve_id, state, command)
+                    if success:
+                        return self.json_response({
+                            "message": "Valve state updated",
+                            "valve_id": valve_id
+                        })
+                    else:
+                        cherrypy.response.status = 404
+                        return self.json_response({"error": f"Valve '{valve_id}' not found"})
 
             elif resource == "pipelines":
-                if len(path) >= 3 and path[1] == "bundle":
-                    pipeline_id = path[2]
+                if len(path) >= 2:
+                    pipeline_id = path[1]
                     updates = {}
 
                     if "name" in input_data:
@@ -465,74 +297,22 @@ class ResourceCatalogWebService(object):
 
             elif resource == "users":
                 if len(path) >= 2:
-                    try:
-                        user_id = int(path[1])
-                    except ValueError:
-                        cherrypy.response.status = 400
-                        return self.json_response({"error": "Invalid user ID"})
-
-                    updates = {}
-                    if "userName" in input_data:
-                        updates["userName"] = input_data["userName"]
-                    if "chatID" in input_data:
-                        updates["chatID"] = input_data["chatID"]
-                    if "sectors" in input_data:
-                        updates["sectors"] = input_data["sectors"]
-
-                    if not updates:
-                        cherrypy.response.status = 400
-                        return self.json_response({"error": "No valid updates provided"})
-
-                    success = self.device_manager.update_user(user_id, updates)
-                    if success:
-                        return self.json_response({
-                            "message": "User updated successfully",
-                            "userID": user_id
-                        })
-                    else:
-                        cherrypy.response.status = 404
-                        return self.json_response({"error": f"User '{user_id}' not found"})
-
-            elif resource == "config":
-                if len(path) > 1:
-                    if path[1] == "global":
-                        updates = input_data.get("updates", {})
-                        self.config_manager.update_global_config(updates)
-                        return self.json_response({
-                            "message": "Global configuration updated"
-                        })
-
-                    elif path[1] == "thresholds":
-                        sensor_type = input_data.get("sensor_type")
-                        thresholds = input_data.get("thresholds")
-
-                        if not sensor_type or not thresholds:
-                            cherrypy.response.status = 400
-                            return self.json_response({"error": "Sensor type and thresholds required"})
-
-                        success = self.config_manager.update_thresholds(sensor_type, thresholds)
-                        if success:
-                            return self.json_response({
-                                "message": "Thresholds updated",
-                                "sensor_type": sensor_type
-                            })
-                        else:
-                            cherrypy.response.status = 404
-                            return self.json_response({"error": f"Sensor type '{sensor_type}' not found"})
-
-                    elif path[1] == "rules":
-                        rule_name = input_data.get("rule_name")
-                        rule_config = input_data.get("rule_config")
-
-                        if not rule_name or not rule_config:
-                            cherrypy.response.status = 400
-                            return self.json_response({"error": "Rule name and config required"})
-
-                        self.config_manager.update_control_rule(rule_name, rule_config)
-                        return self.json_response({
-                            "message": "Control rule updated",
-                            "rule_name": rule_name
-                        })
+                    user_id = path[1]
+                    chat_id = input_data.get("chatID")
+                    if chat_id is not None:
+                        try:
+                            resp = requests.put(
+                                f"{self.account_manager_url}/internal/users/{user_id}",
+                                json={"telegram_chat_id": str(chat_id)},
+                                timeout=5
+                            )
+                            if resp.status_code == 200:
+                                return self.json_response({"message": "User updated", "userID": user_id})
+                            return self.json_response({"error": f"Account manager returned {resp.status_code}"})
+                        except Exception as e:
+                            logger.error(f"Failed to proxy PUT user: {e}")
+                            return self.json_response({"error": "Account manager unavailable"})
+                    return self.json_response({"error": "No valid updates"})
 
             else:
                 cherrypy.response.status = 404
@@ -551,35 +331,8 @@ class ResourceCatalogWebService(object):
 
             resource = path[0]
 
-            if resource == "services" and len(path) > 1:
-                service_id = path[1]
-                success = self.service_registry.unregister_service(service_id)
-
-                if success:
-                    return self.json_response({
-                        "message": "Service unregistered",
-                        "service_id": service_id
-                    })
-                else:
-                    cherrypy.response.status = 404
-                    return self.json_response({"error": f"Service '{service_id}' not found"})
-
-            elif resource == "devices" and len(path) > 2:
-                device_type = path[1]
-                device_id = path[2]
-
-                success = self.device_manager.remove_device(device_type, device_id)
-                if success:
-                    return self.json_response({
-                        "message": f"{device_type} removed",
-                        "device_id": device_id
-                    })
-                else:
-                    cherrypy.response.status = 404
-                    return self.json_response({"error": f"{device_type} '{device_id}' not found"})
-
-            elif resource == "pipelines" and len(path) >= 3 and path[1] == "bundle":
-                pipeline_id = path[2]
+            if resource == "pipelines" and len(path) >= 2:
+                pipeline_id = path[1]
                 success = self.device_manager.remove_pipeline_bundle(pipeline_id)
                 if success:
                     return self.json_response({
@@ -589,23 +342,6 @@ class ResourceCatalogWebService(object):
                 else:
                     cherrypy.response.status = 404
                     return self.json_response({"error": f"Pipeline bundle '{pipeline_id}' not found"})
-
-            elif resource == "users" and len(path) >= 2:
-                try:
-                    user_id = int(path[1])
-                except ValueError:
-                    cherrypy.response.status = 400
-                    return self.json_response({"error": "Invalid user ID"})
-
-                success = self.device_manager.remove_user(user_id)
-                if success:
-                    return self.json_response({
-                        "message": "User removed successfully",
-                        "userID": user_id
-                    })
-                else:
-                    cherrypy.response.status = 404
-                    return self.json_response({"error": f"User '{user_id}' not found"})
 
             else:
                 cherrypy.response.status = 404

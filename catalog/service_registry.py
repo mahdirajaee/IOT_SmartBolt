@@ -30,7 +30,8 @@ class ServiceRegistry:
             "status": "unknown",
             "last_heartbeat": time.time(),
             "registered_at": time.time(),
-            "health_check_url": f"http://{host}:{port}{health_endpoint}"
+            "health_check_url": f"http://{host}:{port}{health_endpoint}",
+            "consecutive_failures": 0
         }
 
         if self.device_manager:
@@ -68,7 +69,6 @@ class ServiceRegistry:
             self.services[service_id]["last_heartbeat"] = time.time()
 
     def check_service_health(self, service_id):
-        # TODO: what if service never responds?
         if service_id not in self.services:
             return False
 
@@ -77,13 +77,16 @@ class ServiceRegistry:
             response = requests.get(service["health_check_url"], timeout=5)
             if response.status_code == 200:
                 self.update_service_status(service_id, "healthy")
+                service["consecutive_failures"] = 0
                 return True
             else:
                 self.update_service_status(service_id, "unhealthy")
+                service["consecutive_failures"] = service.get("consecutive_failures", 0) + 1
                 return False
         except Exception as e:
             logger.warning(f"Health check failed for {service['name']}: {e}")
             self.update_service_status(service_id, "unreachable")
+            service["consecutive_failures"] = service.get("consecutive_failures", 0) + 1
             return False
 
     def start_health_checks(self):
@@ -99,9 +102,14 @@ class ServiceRegistry:
         logger.info("Health check monitoring stopped")
 
     def _health_check_loop(self):
+        STALE_THRESHOLD = 10
         while self.running:
             for service_id in list(self.services.keys()):
                 if not self.running:
                     break
                 self.check_service_health(service_id)
+                svc = self.services.get(service_id, {})
+                if svc.get("consecutive_failures", 0) >= STALE_THRESHOLD:
+                    logger.info(f"Pruning stale service: {svc.get('name')} (id={service_id})")
+                    self.services.pop(service_id, None)
             time.sleep(self.health_check_interval)

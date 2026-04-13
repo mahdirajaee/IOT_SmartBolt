@@ -3,20 +3,7 @@ import dash_bootstrap_components as dbc
 import plotly.graph_objs as go
 from datetime import datetime
 import os
-
-YEAR_CORRECTION_SECONDS = 365 * 24 * 60 * 60
-
-def format_timestamp(timestamp):
-    if timestamp == 'Unknown' or not timestamp:
-        return 'Unknown'
-    try:
-        if isinstance(timestamp, (int, float)):
-            corrected_ts = timestamp - YEAR_CORRECTION_SECONDS
-            dt = datetime.fromtimestamp(corrected_ts)
-            return dt.strftime("%Y-%m-%d %H:%M:%S")
-        return str(timestamp)
-    except:
-        return 'Unknown'
+from components.layouts import format_timestamp
 
 def create_layout(service_client):
     refresh_seconds = max(int(int(os.getenv('AUTO_REFRESH_INTERVAL', 5000)) / 1000), 1)
@@ -438,7 +425,7 @@ def register_callbacks(app, service_client):
             )
             return empty_fig, empty_fig
 
-        temp_data = service_client.get_temperature_data(pipeline_id=pipeline_id, hours=24)
+        temp_data = service_client.get_sensor_data('temperature', pipeline_id=pipeline_id, hours=24)
 
         temp_fig = go.Figure()
         if temp_data:
@@ -478,7 +465,7 @@ def register_callbacks(app, service_client):
             )
         )
 
-        pressure_data = service_client.get_pressure_data(pipeline_id=pipeline_id, hours=24)
+        pressure_data = service_client.get_sensor_data('pressure', pipeline_id=pipeline_id, hours=24)
 
         pressure_fig = go.Figure()
         if pressure_data:

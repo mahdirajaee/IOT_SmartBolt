@@ -17,7 +17,6 @@ class DeviceManager:
             "lastUpdate": "",
             "broker": {"IP": "localhost", "port": 1883},
             "servicesList": [],
-            "devicesList": [],
             "usersList": [],
             "sectorsList": []
         }
@@ -98,26 +97,28 @@ class DeviceManager:
     def _build_catalog_device_entry(self, device_id, device_type, pipeline_id=None):
         if device_type == "bolt":
             pid = pipeline_id or self.devices["bolts"].get(device_id, {}).get("pipeline_id", "")
+            sid = self.devices["pipelines"].get(pid, {}).get("sector_id", "")
             return {
                 "deviceID": device_id,
                 "deviceName": "Smart Bolt",
                 "measureType": ["Temperature", "Pressure"],
                 "availableServices": ["MQTT", "REST"],
                 "servicesDetails": [
-                    {"serviceType": "MQTT", "topic": [f"temperature/{pid}/{device_id}", f"pressure/{pid}/{device_id}"]},
+                    {"serviceType": "MQTT", "topic": [f"sectors/{sid}/pipelines/{pid}/measurements"]},
                     {"serviceType": "REST", "serviceIP": "localhost:8082"}
                 ],
                 "lastUpdate": ""
             }
         else:
             pid = pipeline_id or self.devices["valves"].get(device_id, {}).get("pipeline_id", "")
+            sid = self.devices["pipelines"].get(pid, {}).get("sector_id", "")
             return {
                 "deviceID": device_id,
                 "deviceName": "Control Valve",
                 "measureType": ["ValveState"],
                 "availableServices": ["MQTT"],
                 "servicesDetails": [
-                    {"serviceType": "MQTT", "topic": [f"commands/valves/{pid}"]}
+                    {"serviceType": "MQTT", "topic": [f"sectors/{sid}/pipelines/{pid}/commands/valves"]}
                 ],
                 "lastUpdate": ""
             }
@@ -157,15 +158,7 @@ class DeviceManager:
             })
 
         self.catalog["sectorsList"] = new_sectors
-
-        all_devices = []
-        for bolt_id in self.devices["bolts"]:
-            pid = self.devices["bolts"][bolt_id].get("pipeline_id", "")
-            all_devices.append(self._build_catalog_device_entry(bolt_id, "bolt", pid))
-        for valve_id in self.devices["valves"]:
-            pid = self.devices["valves"][valve_id].get("pipeline_id", "")
-            all_devices.append(self._build_catalog_device_entry(valve_id, "valve", pid))
-        self.catalog["devicesList"] = all_devices
+        self.catalog.pop("devicesList", None)
 
     def _save_catalog(self):
         try:
@@ -204,60 +197,6 @@ class DeviceManager:
         })
         self._save_catalog()
         return True
-
-    def get_users(self):
-        return self.catalog.get("usersList", [])
-
-    def get_user(self, user_id):
-        for user in self.catalog.get("usersList", []):
-            if user.get("userID") == user_id:
-                return user
-        return None
-
-    def get_user_by_name(self, user_name):
-        for user in self.catalog.get("usersList", []):
-            if user.get("userName") == user_name:
-                return user
-        return None
-
-    def add_user(self, user_name, user_id, chat_id=None, sectors=None, password_hash=None):
-        if self.get_user(user_id):
-            return False
-
-        new_user = {
-            "userName": user_name,
-            "userID": user_id,
-            "chatID": chat_id,
-            "passwordHash": password_hash,
-            "sectors": sectors or []
-        }
-        self.catalog["usersList"].append(new_user)
-        self._save_catalog()
-        return True
-
-    def update_user(self, user_id, updates):
-        for user in self.catalog.get("usersList", []):
-            if user.get("userID") == user_id:
-                if "userName" in updates:
-                    user["userName"] = updates["userName"]
-                if "chatID" in updates:
-                    user["chatID"] = updates["chatID"]
-                if "sectors" in updates:
-                    user["sectors"] = updates["sectors"]
-                if "passwordHash" in updates:
-                    user["passwordHash"] = updates["passwordHash"]
-                self._save_catalog()
-                return True
-        return False
-
-    def remove_user(self, user_id):
-        users = self.catalog.get("usersList", [])
-        for i, user in enumerate(users):
-            if user.get("userID") == user_id:
-                users.pop(i)
-                self._save_catalog()
-                return True
-        return False
 
     def get_sectors(self):
         return self.catalog.get("sectorsList", [])

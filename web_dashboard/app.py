@@ -32,10 +32,22 @@ app = Dash(__name__,
           title="IoT Pipeline Monitor",
           update_title=None)
 
-app.server.secret_key = os.getenv('SECRET_KEY', secrets.token_hex(32))
+configured_key = os.getenv('SECRET_KEY')
+if not configured_key:
+    logger.warning("SECRET_KEY not set. Sessions will be invalidated on restart. Set SECRET_KEY env var for persistence.")
+app.server.secret_key = configured_key or secrets.token_hex(32)
 
 auth_manager = AuthManager()
 service_client = ServiceClient()
+
+@app.server.route('/health')
+def health_check():
+    import json as _json
+    from flask import Response
+    return Response(
+        _json.dumps({"status": "healthy", "service": "web_dashboard"}),
+        mimetype='application/json'
+    )
 
 app.layout = html.Div([
     dcc.Location(id='url', refresh=False),
@@ -80,6 +92,12 @@ def display_page(pathname, auth_data):
             navbar = dbc.Navbar(
                 dbc.Container([
                     dbc.NavbarBrand("IoT Dashboard", className="ms-2"),
+                    dbc.Nav([
+                        dbc.NavItem(dbc.NavLink("Overview", href="/overview")),
+                        dbc.NavItem(dbc.NavLink("Pipelines", href="/pipelines")),
+                        dbc.NavItem(dbc.NavLink("Alerts", href="/alerts")),
+                        dbc.NavItem(dbc.NavLink("Analytics", href="/analytics")),
+                    ], navbar=True, className="me-auto"),
                     html.Div([
                         html.Span(auth_data.get('user', {}).get('username', 'User'), className="text-light me-3"),
                         dbc.Button("Logout", id="logout-button", color="link", className="text-light")
@@ -133,18 +151,21 @@ def display_page(pathname, auth_data):
 
     except Exception as e:
         logger.error(f"Error in display_page: {str(e)}", exc_info=True)
-        error_layout = html.Div([
-            dbc.Container([
-                dbc.Alert([
-                    html.H4("Dashboard Error", className="alert-heading"),
-                    html.Hr(),
-                    html.P(f"An error occurred while loading the page: {str(e)}"),
-                    html.P("Please try refreshing the page or contact support if the issue persists.", className="mb-0")
-                ], color="danger", className="mt-4"),
-                dbc.Button("Return to Login", href="/login", color="primary", className="mt-3")
-            ])
+        try:
+            error_navbar = create_navbar(auth_data.get('user', {})) if auth_data else None
+        except Exception:
+            error_navbar = None
+        error_content = dbc.Container([
+            dbc.Alert([
+                html.H4("Dashboard Error", className="alert-heading"),
+                html.Hr(),
+                html.P(f"An error occurred while loading the page: {str(e)}"),
+                html.P("Please try refreshing the page or contact support if the issue persists.", className="mb-0")
+            ], color="danger", className="mt-4"),
+            dbc.Button("Return to Overview", href="/overview", color="primary", className="mt-3")
         ])
-        return error_layout, '/login'
+        error_layout = html.Div([error_navbar, error_content]) if error_navbar else error_content
+        return error_layout, dash.no_update
 
 @app.callback(
     [Output('auth-store', 'data'),
@@ -225,7 +246,7 @@ if __name__ == '__main__':
         name="web_dashboard",
         host=host,
         port=port,
-        health_endpoint="/",
+        health_endpoint="/health",
         description="Visual monitoring interface"
     )
 

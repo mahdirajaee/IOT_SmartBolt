@@ -294,7 +294,7 @@ class ControlRules:
 
         pipeline_id = data.get("pipeline_id")
         if pipeline_id:
-            return [f"valve_{pipeline_id}_1"]
+            return [f"valve_{pipeline_id.lower()}"]
 
         return []
     

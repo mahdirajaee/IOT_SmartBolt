@@ -98,7 +98,23 @@ def create_layout(service_client):
                                     style={'backgroundColor': '#f8fafc'}
                                 )
                             ])
-                        ], md=3),
+                        ], md=2),
+                        dbc.Col([
+                            html.Div([
+                                html.Div([
+                                    html.I(className="fas fa-map-marker-alt me-2", style={'color': '#be123c'}),
+                                    html.Span("Sector", style={'fontWeight': '600', 'color': '#0f172a'})
+                                ], className="mb-2"),
+                                dcc.Dropdown(
+                                    id="alert-sector-filter",
+                                    options=[],
+                                    value=None,
+                                    clearable=True,
+                                    placeholder="All sectors",
+                                    style={'backgroundColor': '#f8fafc'}
+                                )
+                            ])
+                        ], md=2),
                         dbc.Col([
                             html.Div([
                                 html.Div([
@@ -142,7 +158,7 @@ def create_layout(service_client):
                                 style={'background': 'linear-gradient(135deg, #be123c 0%, #ef4444 100%)', 'border': 'none'},
                                 className="mt-4 w-100"
                             )
-                        ], md=2),
+                        ], md=1),
                         dbc.Col([
                             dbc.Button([
                                 html.I(className="fas fa-times me-2"),
@@ -201,19 +217,35 @@ def create_layout(service_client):
 def register_callbacks(app, service_client):
 
     @app.callback(
+        Output('alert-sector-filter', 'options'),
+        [Input('auth-store', 'data')]
+    )
+    def update_alert_sector_options(auth_data):
+        if not auth_data:
+            return []
+        user = auth_data.get('user', {})
+        user_id = user.get('id')
+        role = user.get('role', 'viewer')
+        return service_client.get_sector_options_for_user(user_id, role)
+
+    @app.callback(
         Output('alert-pipeline-filter', 'options'),
-        [Input('alerts-interval', 'n_intervals')],
+        [Input('alerts-interval', 'n_intervals'),
+         Input('alert-sector-filter', 'value')],
         [State('auth-store', 'data')]
     )
-    def update_pipeline_options(n, auth_data):
-        pipelines = service_client.get_pipelines()
-
+    def update_pipeline_options(n, sector_filter, auth_data):
         if not auth_data:
             return []
 
         user = auth_data.get('user', {})
         role = user.get('role', 'viewer')
         user_id = user.get('id')
+
+        if sector_filter:
+            pipelines = service_client.get_pipelines_by_sector(sector_filter)
+        else:
+            pipelines = service_client.get_pipelines()
 
         if role == 'admin':
             options = [
@@ -222,28 +254,24 @@ def register_callbacks(app, service_client):
             ]
         else:
             user_sectors = service_client.get_user_sectors(user_id)
-            sector_to_prefix = {
-                'sector-north': 'N',
-                'sector-south': 'S'
-            }
-            allowed_prefixes = [sector_to_prefix.get(s, '') for s in user_sectors]
             options = [
                 {'label': f"Pipeline {p['pipeline_id']}", 'value': p['pipeline_id']}
                 for p in pipelines
-                if any(p['pipeline_id'].startswith(prefix) for prefix in allowed_prefixes)
+                if p.get('location', {}).get('sector') in user_sectors
             ]
 
         return options
 
     @app.callback(
         [Output('alert-severity-filter', 'value'),
+         Output('alert-sector-filter', 'value'),
          Output('alert-pipeline-filter', 'value'),
          Output('alert-limit-filter', 'value')],
         Input('alert-clear-btn', 'n_clicks'),
         prevent_initial_call=True
     )
     def clear_filters(n_clicks):
-        return 'all', None, 50
+        return 'all', None, None, 50
 
     @app.callback(
         [Output('alerts-list', 'children'),

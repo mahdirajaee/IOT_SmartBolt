@@ -247,7 +247,13 @@ def register_callbacks(app, service_client):
         if not pipeline_id:
             return dbc.Alert("Please select a pipeline for analysis", color="info")
 
-        stats = service_client.get_statistics()
+        pipeline_details = service_client.get_pipeline(pipeline_id)
+        bid = None
+        if pipeline_details:
+            bolts = pipeline_details.get('bolts', [])
+            if bolts:
+                bid = bolts[0].get('bolt_id') if isinstance(bolts[0], dict) else bolts[0]
+        stats = service_client.get_statistics(pipeline_id=pipeline_id, bolt_id=bid)
 
         health = service_client.get_pipeline_health(pipeline_id)
         health_score = health.get('health_score', 0) if health else 0
@@ -264,7 +270,7 @@ def register_callbacks(app, service_client):
                     html.Div([
                         html.Div("Avg Temperature", style={'color': '#6b7280', 'fontSize': '0.9rem', 'fontWeight': '600'}),
                         html.H3(f"{stats.get('temperature', {}).get('mean', 0):.1f}°C", style={'marginBottom': '0.25rem', 'color': '#0b1b2d', 'fontWeight': '700'}),
-                        html.Small(f"σ = {stats.get('temperature', {}).get('std', 0):.2f}", style={'color': '#94a3b8'})
+                        html.Small(f"σ = {stats.get('temperature', {}).get('std') or 0:.2f}", style={'color': '#94a3b8'})
                     ], style={'padding': '1.1rem 1.25rem 1.2rem'})
                 ], style={
                     'backgroundColor': '#ffffff',
@@ -279,7 +285,7 @@ def register_callbacks(app, service_client):
                     html.Div([
                         html.Div("Avg Pressure", style={'color': '#6b7280', 'fontSize': '0.9rem', 'fontWeight': '600'}),
                         html.H3(f"{stats.get('pressure', {}).get('mean', 0):.1f} PSI", style={'marginBottom': '0.25rem', 'color': '#0b1b2d', 'fontWeight': '700'}),
-                        html.Small(f"σ = {stats.get('pressure', {}).get('std', 0):.2f}", style={'color': '#94a3b8'})
+                        html.Small(f"σ = {stats.get('pressure', {}).get('std') or 0:.2f}", style={'color': '#94a3b8'})
                     ], style={'padding': '1.1rem 1.25rem 1.2rem'})
                 ], style={
                     'backgroundColor': '#ffffff',
@@ -343,8 +349,8 @@ def register_callbacks(app, service_client):
             )
             return empty_fig, empty_fig
 
-        temp_data = service_client.get_temperature_data(pipeline_id=pipeline_id, hours=hours)
-        pressure_data = service_client.get_pressure_data(pipeline_id=pipeline_id, hours=hours)
+        temp_data = service_client.get_sensor_data('temperature', pipeline_id=pipeline_id, hours=hours)
+        pressure_data = service_client.get_sensor_data('pressure', pipeline_id=pipeline_id, hours=hours)
 
         corr_fig = go.Figure()
         if temp_data and pressure_data:
@@ -486,7 +492,7 @@ def register_callbacks(app, service_client):
             )
             return empty_fig
 
-        temp_data = service_client.get_temperature_data(pipeline_id=pipeline_id, hours=hours)
+        temp_data = service_client.get_sensor_data('temperature', pipeline_id=pipeline_id, hours=hours)
 
         if not temp_data:
             empty_fig = go.Figure()

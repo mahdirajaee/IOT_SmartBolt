@@ -1,0 +1,17 @@
+{
+  "venvPath": ".",
+  "venv": "venv",
+  "executionEnvironments": [
+    { "root": "telegram_bot" },
+    { "root": "catalog" },
+    { "root": "message_broker" },
+    { "root": "account_manager", "extraPaths": ["."] },
+    { "root": "analytics" },
+    { "root": "control_center", "extraPaths": ["."] },
+    { "root": "raspberry-pi-north", "extraPaths": ["."], "reportAttributeAccessIssue": "none" },
+    { "root": "raspberry-pi-south", "extraPaths": ["."], "reportAttributeAccessIssue": "none" },
+    { "root": "timeSeriesDbConnector" },
+    { "root": "web_dashboard", "extraPaths": ["."] },
+    { "root": "common_utils" }
+  ]
+}

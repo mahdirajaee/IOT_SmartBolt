@@ -360,6 +360,16 @@ def create_factory_floor():
                 ),
                 summary_bar,
                 html.Div(
+                    "Sample data shown for demonstration",
+                    style={
+                        "color": "rgba(255,255,255,0.4)",
+                        "fontSize": "0.75rem",
+                        "textAlign": "center",
+                        "marginTop": "0.5rem",
+                        "marginBottom": "0.5rem",
+                    },
+                ),
+                html.Div(
                     [
                         header,
                         *[_pipeline_row(p) for p in PIPELINES],

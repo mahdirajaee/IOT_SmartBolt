@@ -11,9 +11,8 @@ class ConfigurationManager:
             "global": {
                 "mqtt_broker": os.getenv("DEFAULT_MQTT_BROKER", "localhost"),
                 "mqtt_port": int(os.getenv("DEFAULT_MQTT_PORT", 1883)),
-                "influxdb_url": os.getenv("DEFAULT_INFLUXDB_URL", "http://localhost:8082"),
-                "influxdb_org": os.getenv("DEFAULT_INFLUXDB_ORG", "iot_monitoring"),
-                "influxdb_bucket": os.getenv("DEFAULT_INFLUXDB_BUCKET", "iot_data")
+                "timeseries_db_url": os.getenv("DEFAULT_TIMESERIES_DB_URL", "http://localhost:8082"),
+                "publish_interval": int(os.getenv("PUBLISH_INTERVAL", 5))
             },
             "thresholds": {
                 "temperature": {
@@ -121,9 +120,7 @@ class ConfigurationManager:
             "port": self.configurations["global"].get("mqtt_port", 1883)
         }
     
-    def get_influxdb_config(self):
+    def get_timeseries_db_config(self):
         return {
-            "url": self.configurations["global"].get("influxdb_url", "http://localhost:8082"),
-            "org": self.configurations["global"].get("influxdb_org", "iot_monitoring"),
-            "bucket": self.configurations["global"].get("influxdb_bucket", "iot_data")
+            "url": self.configurations["global"].get("timeseries_db_url", "http://localhost:8082"),
         }

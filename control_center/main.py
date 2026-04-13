@@ -6,7 +6,7 @@ import time
 import threading
 import logging
 from dotenv import load_dotenv
-from typing import Dict, Any
+
 
 from decision_engine import DecisionEngine
 from control_rules import ActionType
@@ -93,59 +93,29 @@ class ControlCenterWebService(object):
                 logger.error(f"Monitoring error: {e}")
                 time.sleep(self.monitoring_interval)
     
-    def json_response(self, data):
-        return json.dumps(data).encode('utf-8')
-
-    def require_auth(self, action='view_status'):
-        # TO DO: double check this auth flow
-        auth_header = cherrypy.request.headers.get('Authorization')
-        if not auth_header:
-            cherrypy.response.status = 401
-            return None, {"error": "Authentication required"}
-        
-#error vaghti invalid bashe auth
+    def _require_auth(self, required_action=None):
+        auth_header = cherrypy.request.headers.get('Authorization', '')
         token = self.auth_client.extract_token_from_header(auth_header)
         if not token:
             cherrypy.response.status = 401
-            return None, {"error": "Invalid authorization header format"}
-
+            return None, self.json_response({"error": "Authorization header required"})
         user = self.auth_client.validate_token(token)
         if not user:
             cherrypy.response.status = 401
-            return None, {"error": "Invalid or expired token"}
-
-        if not self.auth_client.check_permission(user, action):
+            return None, self.json_response({"error": "Invalid or expired token"})
+        if required_action and not self.auth_client.check_permission(user, required_action):
             cherrypy.response.status = 403
-            return None, {"error": "Insufficient permissions", "required_action": action, "user_role": user.get('role')}
-
+            return None, self.json_response({"error": "Insufficient permissions"})
         return user, None
 
+    def json_response(self, data):
+        return json.dumps(data).encode('utf-8')
+
     def GET(self, *path, **query):
-        # not sure if we need all these endpoints
         try:
             if not path:
-                user, error = self.require_auth('view_status')
-                if error:
-                    return self.json_response(error)
-
-                return self.json_response({
-                    "service": "Control Center",
-                    "status": "active",
-                    "monitoring_enabled": self.monitoring_enabled,
-                    "monitoring_interval": self.monitoring_interval,
-                    "connected": self.decision_engine.connected,
-                    "uptime": time.time() - self.start_time,
-                    "timestamp": time.time(),
-                    "endpoints": {
-                        "health": "/health",
-                        "decision": "/decision?pipeline_id={pipeline_id}&bolt_id={bolt_id}",
-                        "manual": "/manual?pipeline_id={pipeline_id}&valve_id={valve_id}&action={open|close}",
-                        "emergency": "/emergency?action=activate|deactivate",
-                        "rules": "/rules",
-                        "stats": "/stats",
-                        "history": "/history?limit=100"
-                    }
-                })
+                cherrypy.response.status = 404
+                return self.json_response({"error": "Endpoint required"})
 
             endpoint = path[0]
 
@@ -158,131 +128,22 @@ class ControlCenterWebService(object):
                         "monitoring": "active" if self.monitoring_enabled else "inactive"
                     }
                 })
-            #endpoint ha baraye tasmimgiri
-            elif endpoint == "decision":
-                user, error = self.require_auth('make_decision')
-                if error:
-                    return self.json_response(error)
-
-                pipeline_id = query.get("pipeline_id")
-                bolt_id = query.get("bolt_id")
-
-                if not pipeline_id or not bolt_id:
-                    cherrypy.response.status = 400
-                    return self.json_response({"error": "pipeline_id and bolt_id required"})
-
-                logger.info(f"Decision requested by {user['username']} ({user['role']}) for pipeline {pipeline_id}, bolt {bolt_id}")
-
-                result = self.decision_engine.make_decision(pipeline_id, bolt_id)
-
-                if result:
-                    return self.json_response({
-                        "pipeline_id": result.pipeline_id,
-                        "bolt_id": result.bolt_id,
-                        "action": result.decision.action.value,
-                        "reason": result.decision.reason,
-                        "confidence": result.decision.confidence,
-                        "rule": result.decision.rule_name,
-                        "commands_sent": result.commands_sent,
-                        "timestamp": result.timestamp,
-                        "requested_by": user['username']
-                    })
-                else:
-                    cherrypy.response.status = 500
-                    return self.json_response({"error": "Could not make decision"})
-
-            elif endpoint == "manual":
-                user, error = self.require_auth('manual_control')
-                if error:
-                    return self.json_response(error)
-
-                pipeline_id = query.get("pipeline_id")
-                valve_id = query.get("valve_id")
-                action = query.get("action")
-                reason = query.get("reason", f"Manual control by {user['username']}")
-                
-                if not all([pipeline_id, valve_id, action]):
-                    cherrypy.response.status = 400
-                    return self.json_response({"error": "pipeline_id, valve_id, and action required"})
-                
-                logger.info(f"Manual control by {user['username']} ({user['role']}): {action} valve {valve_id} in pipeline {pipeline_id}")
-
-                success = self.decision_engine.handle_manual_override(
-                    pipeline_id, valve_id, action, reason
-                )
-
-                return self.json_response({
-                    "success": success,
-                    "pipeline_id": pipeline_id,
-                    "valve_id": valve_id,
-                    "action": action,
-                    "reason": reason,
-                    "timestamp": time.time(),
-                    "executed_by": user['username']
-                })
-#ghesmate desicion baraye emergency rule check she
-            elif endpoint == "emergency":
-                user, error = self.require_auth('emergency_mode')
-                if error:
-                    return self.json_response(error)
-
-                action = query.get("action", "status")
-
-                if action == "activate":
-                    logger.warning(f"Emergency mode ACTIVATED by {user['username']} ({user['role']})")
-                    self.decision_engine.set_emergency_mode(True)
-                    return self.json_response({
-                        "message": "Emergency mode activated",
-                        "timestamp": time.time(),
-                        "activated_by": user['username']
-                    })
-                elif action == "deactivate":
-                    logger.info(f"Emergency mode DEACTIVATED by {user['username']} ({user['role']})")
-                    self.decision_engine.set_emergency_mode(False)
-                    return self.json_response({
-                        "message": "Emergency mode deactivated",
-                        "timestamp": time.time(),
-                        "deactivated_by": user['username']
-                    })
-                else:
-                    return self.json_response({
-                        "emergency_mode": self.decision_engine.control_rules.emergency_mode,
-                        "timestamp": time.time()
-                    })
-
-            elif endpoint == "rules":
-                user, error = self.require_auth('view_rules')
-                if error:
-                    return self.json_response(error)
-
-                return self.json_response({
-                    "rules": self.decision_engine.control_rules.get_rules_summary(),
-                    "emergency_mode": self.decision_engine.control_rules.emergency_mode,
-                    "override_mode": self.decision_engine.control_rules.override_mode
-                })
-
-            elif endpoint == "stats":
-                user, error = self.require_auth('view_stats')
-                if error:
-                    return self.json_response(error)
-
-                return self.json_response(self.decision_engine.get_stats())
 
             elif endpoint == "history":
-                user, error = self.require_auth('view_history')
+                user, error = self._require_auth("view_history")
                 if error:
-                    return self.json_response(error)
+                    return error
 
                 limit = int(query.get("limit", 100))
                 return self.json_response({
                     "history": self.decision_engine.get_history(limit),
                     "total_decisions": len(self.decision_engine.decision_history)
                 })
-            
+
             else:
                 cherrypy.response.status = 404
                 return self.json_response({"error": f"Endpoint '{endpoint}' not found"})
-                
+
         except Exception as e:
             logger.error(f"GET error: {e}")
             cherrypy.response.status = 500
@@ -295,122 +156,74 @@ class ControlCenterWebService(object):
                 return self.json_response({"error": "Endpoint required"})
             
             endpoint = path[0]
-            input_data = json.loads(cherrypy.request.body.read())
-            
-            if endpoint == "process":
-                user, error = self.require_auth('process_pipeline')
+            try:
+                input_data = json.loads(cherrypy.request.body.read())
+            except (json.JSONDecodeError, ValueError):
+                cherrypy.response.status = 400
+                return self.json_response({"error": "Invalid or missing JSON body"})
+
+            if endpoint == "manual":
+                user, error = self._require_auth("manual_control")
                 if error:
-                    return self.json_response(error)
+                    return error
 
                 pipeline_id = input_data.get("pipeline_id")
-
-                if pipeline_id:
-                    logger.info(f"Pipeline processing triggered by {user['username']} ({user['role']}) for pipeline {pipeline_id}")
-                    results = self.decision_engine.process_pipeline(pipeline_id)
-
-                    return self.json_response({
-                        "pipeline_id": pipeline_id,
-                        "decisions_made": len(results),
-                        "results": [{
-                            "bolt_id": r.bolt_id,
-                            "action": r.decision.action.value,
-                            "reason": r.decision.reason
-                        } for r in results],
-                        "timestamp": time.time(),
-                        "triggered_by": user['username']
-                    })
-                else:
-                    logger.info(f"All pipelines processing triggered by {user['username']} ({user['role']})")
-                    results = self.decision_engine.process_all_pipelines()
-
-                    summary = {}
-                    for pipeline_id, pipeline_results in results.items():
-                        summary[pipeline_id] = {
-                            "decisions_made": len(pipeline_results),
-                            "actions": [r.decision.action.value for r in pipeline_results]
-                        }
-
-                    return self.json_response({
-                        "summary": summary,
-                        "total_decisions": sum(len(r) for r in results.values()),
-                        "timestamp": time.time(),
-                        "triggered_by": user['username']
-                    })
-            
-            elif endpoint == "monitoring":
-                user, error = self.require_auth('modify_monitoring')
-                if error:
-                    return self.json_response(error)
-
+                valve_id = input_data.get("valve_id")
                 action = input_data.get("action")
+                reason = input_data.get("reason", "Manual control")
 
-                if action == "start":
-                    if not self.monitoring_enabled:
-                        logger.info(f"Monitoring started by {user['username']} ({user['role']})")
-                        self.start_monitoring()
-                    return self.json_response({
-                        "message": "Monitoring started",
-                        "monitoring_enabled": self.monitoring_enabled,
-                        "modified_by": user['username']
-                    })
-
-                elif action == "stop":
-                    if self.monitoring_enabled:
-                        logger.warning(f"Monitoring stopped by {user['username']} ({user['role']})")
-                        self.stop_monitoring()
-                    return self.json_response({
-                        "message": "Monitoring stopped",
-                        "monitoring_enabled": self.monitoring_enabled,
-                        "modified_by": user['username']
-                    })
-
-                else:
+                if not all([pipeline_id, valve_id, action]):
                     cherrypy.response.status = 400
-                    return self.json_response({"error": "Invalid action"})
-            
+                    return self.json_response({"error": "pipeline_id, valve_id, and action required"})
+
+                logger.info(f"Manual control: {action} valve {valve_id} in pipeline {pipeline_id}")
+
+                success = self.decision_engine.handle_manual_override(
+                    pipeline_id, valve_id, action, reason
+                )
+
+                return self.json_response({
+                    "success": success,
+                    "pipeline_id": pipeline_id,
+                    "valve_id": valve_id,
+                    "action": action,
+                    "reason": reason,
+                    "timestamp": time.time()
+                })
+
+            elif endpoint == "emergency":
+                user, error = self._require_auth("emergency_mode")
+                if error:
+                    return error
+
+                action = input_data.get("action", "status")
+
+                if action == "activate":
+                    logger.warning("Emergency mode ACTIVATED")
+                    self.decision_engine.set_emergency_mode(True)
+                    return self.json_response({
+                        "message": "Emergency mode activated",
+                        "timestamp": time.time()
+                    })
+                elif action == "deactivate":
+                    logger.info("Emergency mode DEACTIVATED")
+                    self.decision_engine.set_emergency_mode(False)
+                    return self.json_response({
+                        "message": "Emergency mode deactivated",
+                        "timestamp": time.time()
+                    })
+                else:
+                    return self.json_response({
+                        "emergency_mode": self.decision_engine.control_rules.emergency_mode,
+                        "timestamp": time.time()
+                    })
+
             else:
                 cherrypy.response.status = 404
                 return self.json_response({"error": f"POST endpoint '{endpoint}' not found"})
                 
         except Exception as e:
             logger.error(f"POST error: {e}")
-            cherrypy.response.status = 500
-            return self.json_response({"error": str(e)})
-    
-    def PUT(self, *path, **query):
-        try:
-            if not path:
-                cherrypy.response.status = 400
-                return self.json_response({"error": "Endpoint required"})
-            
-            endpoint = path[0]
-            
-            if endpoint == "cache":
-                user, error = self.require_auth('clear_cache')
-                if error:
-                    return self.json_response(error)
-
-                action = query.get("action")
-
-#rules va cash add va ya hazf mishan
-                if action == "clear":
-                    logger.info(f"Cache cleared by {user['username']} ({user['role']})")
-                    self.decision_engine.clear_cache()
-                    return self.json_response({
-                        "message": "Cache cleared",
-                        "timestamp": time.time(),
-                        "cleared_by": user['username']
-                    })
-                else:
-                    cherrypy.response.status = 400
-                    return self.json_response({"error": "Invalid action"})
-            
-            else:
-                cherrypy.response.status = 404
-                return self.json_response({"error": f"PUT endpoint '{endpoint}' not found"})
-                
-        except Exception as e:
-            logger.error(f"PUT error: {e}")
             cherrypy.response.status = 500
             return self.json_response({"error": str(e)})
     
@@ -427,7 +240,7 @@ def main():
         'server.socket_port': port,
         'engine.autoreload.on': False
     })
-    #wildcard ha vase cors
+    
     app_config = {
         '/': {
             'request.dispatch': cherrypy.dispatch.MethodDispatcher(),
@@ -435,7 +248,7 @@ def main():
             'tools.response_headers.headers': [
                 ('Content-Type', 'application/json'),
                 ('Access-Control-Allow-Origin', '*'),
-                ('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE'),
+                ('Access-Control-Allow-Methods', 'GET, POST, DELETE'),
                 ('Access-Control-Allow-Headers', 'Content-Type, Authorization')
             ]
         }
