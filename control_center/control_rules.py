@@ -1,7 +1,7 @@
 # control rules - 12 rules for valve decisions
 import os
 import logging
-from typing import Dict, Any, List, Optional, Tuple
+from typing import Dict, Any, List, Optional, Callable
 from dataclasses import dataclass
 from enum import Enum
 
@@ -25,7 +25,7 @@ class RuleType(Enum):
 class ControlRule:
     name: str
     rule_type: RuleType
-    condition: callable
+    condition: Callable
     action: ActionType
     priority: int
     description: str

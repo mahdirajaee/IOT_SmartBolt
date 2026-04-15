@@ -99,7 +99,7 @@ class MQTTPublisher:
 
         return senml
 
-    def publish_sensor_data(self, data, topic=None):
+    def publish_sensor_data(self, data):
         try:
             pipeline_id = data.get('pipeline_id')
             if not pipeline_id:

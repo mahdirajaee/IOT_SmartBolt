@@ -40,6 +40,7 @@ class RaspberryPiWebService(object):
     @cherrypy.expose
     @cherrypy.tools.json_out()
     def GET(self, *path, **query):
+
         if not path:
             return {
                 "service": "Raspberry Pi Sensor Simulator v2.0",
@@ -194,6 +195,7 @@ class RaspberryPiWebService(object):
     @cherrypy.tools.json_out()
     @cherrypy.tools.json_in()
     def PUT(self, *path, **query):
+        # update stuff
         if not path:
             cherrypy.response.status = 400
             return {"error": "Endpoint required"}
@@ -306,7 +308,7 @@ if __name__ == '__main__':
     app = RaspberryPiWebService()
     
     cherrypy.config.update(config['global'])
-    
+    cherrypy.engine.subscribe("stop", app.simulator.shutdown)
     cherrypy.tree.mount(app, '/', config)
 
     catalog_url = os.getenv("CATALOG_URL", "http://localhost:8081")

@@ -310,7 +310,7 @@ if __name__ == '__main__':
     app = RaspberryPiWebService()
     
     cherrypy.config.update(config['global'])
-    
+    cherrypy.engine.subscribe("stop", app.simulator.shutdown)
     cherrypy.tree.mount(app, '/', config)
 
     catalog_url = os.getenv("CATALOG_URL", "http://localhost:8081")

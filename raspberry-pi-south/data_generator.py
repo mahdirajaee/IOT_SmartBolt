@@ -3,7 +3,7 @@ import time
 import logging
 import os
 import math
-from typing import Dict, Any, Optional
+from typing import Dict
 from dataclasses import dataclass
 
 logger = logging.getLogger(__name__)
@@ -34,7 +34,6 @@ class SensorConfig:
     critical_spike_pressure_max: float = float(os.getenv("CRITICAL_SPIKE_PRESSURE_MAX", "140.0"))
 
 class Bolt:
-    # see north
 
     def __init__(self, bolt_id, limits=None):
         self.bolt_id = bolt_id
@@ -70,6 +69,7 @@ class Bolt:
                 self.config.critical_spike_temp_min,
                 self.config.critical_spike_temp_max
             )
+            # har dafe ke generate data call mishe, 5 darsad emkane critical spike has
             pressure_spike = random.uniform(
                 self.config.critical_spike_pressure_min,
                 self.config.critical_spike_pressure_max
@@ -95,6 +95,7 @@ class Bolt:
             self.wave_temp_enabled = True
 
     def _gaussian_deviation(self, t):
+        # bell curve math
         duration = self.config.wave_duration
         center = duration / 2
         sigma = duration / 6
@@ -211,11 +212,11 @@ class Valve:
         logger.info(f"Valve {self.valve_id} set to {new_state}")
         return True
 
-    def update(self) -> Dict[str, Any]:
+    def update(self):
         self.health = max(0, self.health - 0.001 - (0.01 * self.error_count))
         return self.get_status()
 
-    def get_status(self) -> Dict[str, Any]:
+    def get_status(self):
         return {
             "valve_id": self.valve_id,
             "state": self.state,
@@ -243,22 +244,23 @@ class Pipeline:
         self.created_at = time.time()
         self.data_points_generated = 0
 
-    def add_bolt(self, bolt_id: str, limits: Optional[SensorLimits] = None) -> Bolt:
+    def add_bolt(self, bolt_id, limits=None):
         bolt = Bolt(bolt_id, limits)
         self.bolts[bolt_id] = bolt
         logger.debug(f"Added bolt {bolt_id} to pipeline {self.pipeline_id}")
         return bolt
 
-    def add_valve(self, valve_id: str, initial_state: str = "closed") -> Valve:
+    def add_valve(self, valve_id, initial_state="closed"):
         valve = Valve(valve_id, initial_state)
         self.valves[valve_id] = valve
         logger.debug(f"Added valve {valve_id} to pipeline {self.pipeline_id}")
         return valve
 
-    def generate_data(self) -> Dict[str, Any]:
+    def generate_data(self):
         bolt_data = {}
         valve_status = {}
 
+        # get valve positions first
         valve_positions = {}
         for valve_id, valve in self.valves.items():
             valve_positions[valve_id] = valve.position
@@ -304,13 +306,13 @@ class Pipeline:
             }
         }
 
-    def set_valve_state(self, valve_id: str, state: str) -> bool:
+    def set_valve_state(self, valve_id, state):
         if valve_id in self.valves:
             return self.valves[valve_id].set_state(state)
         logger.error(f"Valve {valve_id} not found in pipeline {self.pipeline_id}")
         return False
 
-    def get_info(self) -> Dict[str, Any]:
+    def get_info(self):
         return {
             "pipeline_id": self.pipeline_id,
             "status": self.status,

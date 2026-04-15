@@ -4,7 +4,7 @@ import threading
 import logging
 import requests
 import time
-from typing import Dict, List, Tuple, Any
+from typing import Dict, List, Tuple, Any, Callable
 from dotenv import load_dotenv
 from data_generator import Pipeline, SensorLimits
 
@@ -15,7 +15,7 @@ class PipelineManager:
     def __init__(self):
         self.config_lock = threading.Lock()
         self.pipelines: Dict[str, Pipeline] = {}
-        self.observers = []
+        self.observers: List[Callable] = []
         self.sensor_limits = None
         self.sector_id = os.getenv("SECTOR_ID", "sector-unknown")
         self.resource_catalog_url = os.getenv("CATALOG_URL", "http://localhost:8081")
@@ -66,13 +66,13 @@ class PipelineManager:
                 }
             return config
     
-    def add_pipeline(self, pid, sensors, valves):
+    def add_pipeline(self, pipeline_id, sensors, valves):
         with self.config_lock:
-            if pid in self.pipelines:
-                logger.warning(f"Pipeline {pid} exists")
+            if pipeline_id in self.pipelines:
+                logger.warning(f"Pipeline {pipeline_id} exists")
                 return False
 
-            pipeline = Pipeline(pid)
+            pipeline = Pipeline(pipeline_id)
 
             bolt_ids = set()
             for sensor_id, sensor_type in sensors:
@@ -84,32 +84,32 @@ class PipelineManager:
             for valve_id, valve_state in valves:
                 pipeline.add_valve(valve_id, valve_state)
 
-            self.pipelines[pid] = pipeline
-            logger.info(f"Added pipeline {pid}")
+            self.pipelines[pipeline_id] = pipeline
+            logger.info(f"Added pipeline {pipeline_id}")
         
         self._notify_observers()
         return True
     
-    def remove_pipeline(self, pid):
+    def remove_pipeline(self, pipeline_id):
         with self.config_lock:
-            if pid in self.pipelines:
-                del self.pipelines[pid]
-                logger.info(f"Removed {pid}")
+            if pipeline_id in self.pipelines:
+                del self.pipelines[pipeline_id]
+                logger.info(f"Removed {pipeline_id}")
                 self._notify_observers()
                 return True
             return False
     
-    def update_pipeline_status(self, pid, status):
+    def update_pipeline_status(self, pipeline_id, status):
         with self.config_lock:
-            if pid in self.pipelines:
-                self.pipelines[pid].status = status
-                logger.info(f"Updated {pid} to {status}")
+            if pipeline_id in self.pipelines:
+                self.pipelines[pipeline_id].status = status
+                logger.info(f"Updated {pipeline_id} to {status}")
                 self._notify_observers()
                 return True
             return False
     
-    def set_valve_state(self, pid, valve_id, state):
-        pipeline = self.get_pipeline(pid)
+    def set_valve_state(self, pipeline_id, valve_id, state):
+        pipeline = self.get_pipeline(pipeline_id)
         if pipeline:
             return pipeline.set_valve_state(valve_id, state)
         return False
@@ -140,12 +140,14 @@ class PipelineManager:
                     })
         return valves
     
-    def add_observer(self, cb):
-        self.observers.append(cb)
+    def add_observer(self, callback):
+        self.observers.append(callback)
+        logger.debug(f"Added configuration observer: {callback.__name__}")
 
-    def remove_observer(self, cb):
-        if cb in self.observers:
-            self.observers.remove(cb)
+    def remove_observer(self, callback):
+        if callback in self.observers:
+            self.observers.remove(callback)
+            logger.debug(f"Removed configuration observer: {callback.__name__}")
 
     def _notify_observers(self):
         config = self.get_pipeline_config()
@@ -156,6 +158,7 @@ class PipelineManager:
                 logger.error(f"Error notifying observer {callback.__name__}: {e}")
     
     def reload_configuration(self):
+        logger.info("Reloading pipeline configuration")
         self._load_configuration()
 
     def get_statistics(self):
@@ -257,16 +260,17 @@ class PipelineManager:
             logger.error(f"Unexpected error during sync: {e}")
             return False
 
-    def _add_pipeline_from_catalog(self, pid, catalog_data):
+    def _add_pipeline_from_catalog(self, pipeline_id, catalog_data):
         with self.config_lock:
-            if pid in self.pipelines:
+            if pipeline_id in self.pipelines:
+                logger.debug(f"Pipeline {pipeline_id} already exists, skipping")
                 return
 
             pipeline_info = catalog_data.get("pipeline", {})
             bolts_info = catalog_data.get("bolts", [])
             valves_info = catalog_data.get("valves", [])
 
-            pipeline = Pipeline(pid)
+            pipeline = Pipeline(pipeline_id)
 
             for bolt_info in bolts_info:
                 bolt_id = bolt_info.get("id")
@@ -283,27 +287,31 @@ class PipelineManager:
                         limits = self.sensor_limits
 
                     pipeline.add_bolt(bolt_id, limits)
+                    logger.debug(f"Added bolt {bolt_id} to pipeline {pipeline_id}")
 
             for valve_info in valves_info:
                 valve_id = valve_info.get("id")
                 if valve_id:
                     valve_state = valve_info.get("current_state", "closed")
                     pipeline.add_valve(valve_id, valve_state)
+                    logger.debug(f"Added valve {valve_id} to pipeline {pipeline_id}")
 
             pipeline.status = pipeline_info.get("status", "active")
 
-            self.pipelines[pid] = pipeline
-            logger.info(f"Added {pid} from catalog")
+            self.pipelines[pipeline_id] = pipeline
+            logger.info(f"Successfully added pipeline {pipeline_id} from catalog with {len(bolts_info)} bolts and {len(valves_info)} valves")
 
     def stop_catalog_sync(self):
         self.sync_running = False
         if self.sync_thread and self.sync_thread.is_alive():
             self.sync_thread.join(timeout=5)
+        logger.info("Stopped catalog sync thread")
 
     def reset_all(self):
         with self.config_lock:
             for pipeline in self.pipelines.values():
                 pipeline.reset()
+        logger.info("All pipelines reset")
 
     def update_catalog_bolt_status(self, bolt_id, temp, pressure):
         try:

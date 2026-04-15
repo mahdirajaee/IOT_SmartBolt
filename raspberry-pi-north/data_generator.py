@@ -3,7 +3,7 @@ import time
 import logging
 import os
 import math
-from typing import Dict, Any
+from typing import Dict
 from dataclasses import dataclass
 
 logger = logging.getLogger(__name__)
@@ -74,12 +74,10 @@ class Bolt:
                 self.config.critical_spike_pressure_min,
                 self.config.critical_spike_pressure_max
             )
-            #logger.warning(f"Bolt {self.bolt_id}: CRITICAL SPIKE - T:{temp_spike:.1f}C P:{pressure_spike:.1f}PSI")
             return True, temp_spike, pressure_spike
         return False, 0.0, 0.0
 
     def generate_data(self, valve_position=0.0):
-        
         current_time = time.time()
         time_delta = current_time - self.last_update
 
@@ -95,7 +93,6 @@ class Bolt:
         self.wave_pressure_enabled = random.random() < 0.4
         if not self.wave_temp_enabled and not self.wave_pressure_enabled:
             self.wave_temp_enabled = True
-        #logger.info(f"Bolt {self.bolt_id}: Gaussian wave started - temp={self.wave_temp_enabled}, pressure={self.wave_pressure_enabled}")
 
     def _gaussian_deviation(self, t):
         # bell curve math
@@ -129,7 +126,6 @@ class Bolt:
                 self.next_wave_time = current_time + random.uniform(
                     self.config.wave_cycle_min, self.config.wave_cycle_max
                 )
-                #logger.info(f"Bolt {self.bolt_id}: Gaussian wave ended, next in {self.next_wave_time - current_time:.0f}s")
 
         raw_temp = self.temp_target + temp_noise + self.temp_drift + wave_temp_effect
         raw_pressure = self.pressure_target + pressure_noise + self.pressure_drift + wave_pressure_effect
