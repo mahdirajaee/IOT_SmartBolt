@@ -10,16 +10,14 @@ from typing import Any
 
 from mqtt_subscriber import MQTTSubscriber
 from influxdb3_storage import InfluxDB3Storage
+load_dotenv()
+load_dotenv(Path(__file__).resolve().with_name(".env"))
 
 #certificate handling for gRPC on Windows
 # Force gRPC to use the Windows CA bundle that worked with curl.exe
 os.environ["GRPC_DEFAULT_SSL_ROOTS_FILE_PATH"] = r"C:\certs\cacert.pem"
 print(f"[DEBUG] Using CA bundle: {os.environ['GRPC_DEFAULT_SSL_ROOTS_FILE_PATH']}")
 #--------------------------------------------
-
-
-load_dotenv()
-load_dotenv(Path(__file__).resolve().with_name(".env"))
 
 logging.basicConfig(
     level=getattr(logging, os.getenv("LOG_LEVEL", "INFO")),
@@ -58,7 +56,10 @@ class TimeSeriesDBService(object):
                 token=self.influx_token,
                 org=self.influx_org
             )
-            logger.info(f"InfluxDB v3 storage initialized")
+            if self.storage.connected:
+                logger.info("InfluxDB v3 storage initialized")
+            else:
+                logger.warning("InfluxDB v3 storage initialized in disconnected state")
         except Exception as e:
             logger.warning(f"Failed to connect to InfluxDB v3: {e} - using in-memory storage")
             self.storage = None
@@ -86,11 +87,11 @@ class TimeSeriesDBService(object):
                 port=int(os.getenv("CHERRYPY_PORT", 8082)),
                 description="Time series database connector for IoT data"
             ):
-                logger.info("Registered with Resource Catalog")
+                logger.info("Registered with Catalog")
             else:
-                logger.warning("Could not register with Resource Catalog")
+                logger.warning("Could not register with Catalog")
         except Exception as e:
-            logger.warning(f"Resource Catalog not available: {e}")
+            logger.warning(f"Catalog not available: {e}")
 
     def _get_pipeline_ids_from_catalog(self):
         try:
@@ -114,10 +115,8 @@ class TimeSeriesDBService(object):
         try:
             if data_type == "sensor":
                 self.storage.store_sensor_reading(data)
-            elif data_type == "valve":
-                self.storage.store_valve_status(data)
-            elif data_type == "anomaly":
-                self.storage.store_anomaly_event(data)
+            else:
+                logger.debug(f"Ignoring unsupported storage data type: {data_type}")
 
         except Exception as e:
             logger.error(f"Storage error: {e}")
@@ -131,13 +130,18 @@ class TimeSeriesDBService(object):
                 return self.json_response({
                     "service": "TimeSeriesDB Connector v2.0",
                     "status": "active",
-                    "storage": "InfluxDB" if self.storage else "in-memory",
+                    "storage": (
+                        "InfluxDB"
+                        if self.storage and self.storage.connected
+                        else "disconnected"
+                        if self.storage
+                        else "unavailable"
+                    ),
                     "uptime": time.time() - self.start_time,
                     "endpoints": {
                         "data": {
                             "temperature": "/temperature?pipeline_id={pipeline_id}&bolt_id={bolt_id}&limit={limit}",
-                            "pressure": "/pressure?pipeline_id={pipeline_id}&bolt_id={bolt_id}&limit={limit}",
-                            "alerts": "/alerts?pipeline_id={pipeline_id}&severity={severity}&hours={hours}"
+                            "pressure": "/pressure?pipeline_id={pipeline_id}&bolt_id={bolt_id}&limit={limit}"
                         },
                         "monitoring": {
                             "health": "/health",
@@ -150,12 +154,16 @@ class TimeSeriesDBService(object):
             endpoint = path[0]
             
             if endpoint == "health":
+                mqtt_connected = bool(self.subscriber and self.subscriber.mqtt.connected)
+                influx_connected = bool(self.storage and self.storage.connected)
+                overall_healthy = mqtt_connected and influx_connected
+                cherrypy.response.status = 200 if overall_healthy else 503
                 return self.json_response({
-                    "status": "healthy",
+                    "status": "healthy" if overall_healthy else "unhealthy",
                     "timestamp": time.time(),
                     "components": {
-                        "influxdb": "connected" if self.storage and self.storage.connected else "disconnected",
-                        "mqtt": "connected" if self.subscriber and self.subscriber.connected else "disconnected"
+                        "influxdb": "connected" if influx_connected else "disconnected",
+                        "mqtt": "connected" if mqtt_connected else "disconnected"
                     },
                     "stats": {
                         "mqtt": self.subscriber.get_stats() if self.subscriber else {},
@@ -185,7 +193,7 @@ class TimeSeriesDBService(object):
                     cherrypy.response.status = 400
                     return self.json_response({"error": "Invalid limit or hours parameter"})
 
-                start_time = datetime.now() - timedelta(hours=hours)
+                start_time = datetime.utcnow() - timedelta(hours=hours)
 
                 data = self.storage.query_sensor_data(
                     measurement=endpoint,
@@ -223,39 +231,6 @@ class TimeSeriesDBService(object):
                         "pipelines": summaries,
                         "total_pipelines": len(summaries)
                     })
-            
-            elif endpoint == "alerts":
-                if not self.storage:
-                    cherrypy.response.status = 503
-                    return self.json_response({"error": "Storage not available"})
-
-                pipeline_id = query.get("pipeline_id")
-                severity = query.get("severity")
-                try:
-                    hours = max(1, min(int(query.get("hours", 24)), 720))
-                    limit = max(1, min(int(query.get("limit", 100)), 10000))
-                except (ValueError, TypeError):
-                    cherrypy.response.status = 400
-                    return self.json_response({"error": "Invalid limit or hours parameter"})
-
-                alerts = self.storage.query_alerts(
-                    pipeline_id=pipeline_id,
-                    severity=severity,
-                    hours=hours,
-                    limit=limit
-                )
-
-                return self.json_response({
-                    "alerts": alerts,
-                    "total": len(alerts),
-                    "filters": {
-                        "pipeline_id": pipeline_id,
-                        "severity": severity,
-                        "hours": hours,
-                        "limit": limit
-                    },
-                    "timestamp": time.time()
-                })
 
             else:
                 cherrypy.response.status = 404

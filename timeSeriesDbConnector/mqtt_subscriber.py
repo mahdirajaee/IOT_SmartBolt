@@ -5,7 +5,7 @@ import os
 import sys
 from typing import Callable
 
-from data_models import SensorReading, ValveStatus, AnomalyEvent
+from data_models import SensorReading
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from MyMQTT import MyMQTT
@@ -22,7 +22,6 @@ class MQTTSubscriber:
 
         self.mqtt = MyMQTT(self.client_id, self.broker, self.port, self, clean_session=False)
 
-        self.connected = False
         self.storage_callback = None
 
         self.stats = {
@@ -56,8 +55,6 @@ class MQTTSubscriber:
     def _handle_message(self, topic, data):
         if "/measurements" in topic:
             self._handle_sensor_data(data)
-        elif "/alerts/" in topic:
-            self._handle_anomaly_data(data)
         else:
             logger.debug(f"Unrecognized topic pattern: {topic}")
 
@@ -73,7 +70,6 @@ class MQTTSubscriber:
         pipeline_id = parts[3] if len(parts) >= 4 else "unknown"
 
         bolts = {}
-        valves = {}
 
         for entry in entries:
             name = entry.get("n", "")
@@ -89,15 +85,11 @@ class MQTTSubscriber:
                 if device_id not in bolts:
                     bolts[device_id] = {}
                 bolts[device_id][field] = value
-            elif device_id.startswith("valve_"):
-                if device_id not in valves:
-                    valves[device_id] = {}
-                valves[device_id][field] = value
 
-        return pipeline_id, sector_id, bt, bolts, valves
+        return pipeline_id, sector_id, bt, bolts
 
     def _handle_sensor_data(self, data):
-        pipeline_id, sector_id, timestamp, bolts, valves = self._parse_senml(data)
+        pipeline_id, sector_id, timestamp, bolts = self._parse_senml(data)
 
         for bolt_id, readings in bolts.items():
             sensor_reading = SensorReading(
@@ -111,35 +103,6 @@ class MQTTSubscriber:
             if self.storage_callback:
                 self.storage_callback("sensor", sensor_reading)
 
-        for valve_id, fields in valves.items():
-            vs = ValveStatus(
-                pipeline_id=pipeline_id,
-                valve_id=valve_id,
-                state=fields.get("state", "unknown"),
-                timestamp=timestamp,
-                sector_id=sector_id
-            )
-            if self.storage_callback:
-                self.storage_callback("valve", vs)
-
-    def _handle_anomaly_data(self, data):
-        logger.info(f"Processing anomaly: {data.get('pipeline_id')} - {data.get('anomaly_type')} - {data.get('severity')}")
-        anomaly_event = AnomalyEvent(
-            pipeline_id=data.get("pipeline_id"),
-            bolt_id=data.get("bolt_id"),
-            anomaly_type=data.get("anomaly_type", data.get("alert_type", "unknown")),
-            severity=data.get("severity", "unknown"),
-            description=data.get("description", data.get("message", "")),
-            timestamp=data.get("timestamp", time.time()),
-            sensor_values={
-                "temperature": data.get("temperature"),
-                "pressure": data.get("pressure")
-            },
-            sector_id=data.get("sector_id", "sector-north")
-        )
-        if self.storage_callback:
-            self.storage_callback("anomaly", anomaly_event)
-
     def set_storage_callback(self, callback: Callable):
         self.storage_callback = callback
 
@@ -149,8 +112,6 @@ class MQTTSubscriber:
             time.sleep(1)
 
             self.mqtt.mySubscribe("sectors/+/pipelines/+/measurements")
-            self.mqtt.mySubscribe("sectors/+/pipelines/+/alerts/+")
-            self.connected = True
 
             logger.info("MQTT Subscriber started - subscribed directly to RPi topics")
             return True
@@ -161,7 +122,6 @@ class MQTTSubscriber:
     def stop(self):
         logger.info("Stopping MQTT subscriber...")
         self.mqtt.stop()
-        self.connected = False
         logger.info("MQTT subscriber stopped")
 
     def get_stats(self):
@@ -171,5 +131,5 @@ class MQTTSubscriber:
             "uptime_seconds": uptime,
             "messages_per_minute": (self.stats["messages_received"] / uptime) * 60 if uptime > 0 else 0,
             "queue_size": 0,
-            "connected": self.connected
+            "connected": self.mqtt.connected
         }

@@ -1,11 +1,11 @@
 import logging
 import time
 from typing import Dict, Any, List, Optional
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from influxdb_client_3 import InfluxDBClient3, Point, WritePrecision, WriteOptions
 from urllib.parse import urlparse
 
-from data_models import SensorReading, ValveStatus, AnomalyEvent
+from data_models import SensorReading
 
 logger = logging.getLogger(__name__)
 
@@ -83,12 +83,15 @@ class InfluxDB3Storage:
             return False
 
     def _ensure_databases(self):
+        failures = []
         for client, bucket in [(self.client_north, self.bucket_north), (self.client_south, self.bucket_south)]:
             try:
                 client.query("SELECT 1")
                 logger.info(f"Bucket '{bucket}' is ready")
             except Exception as e:
-                logger.warning(f"Bucket '{bucket}' connectivity check: {e}")
+                failures.append(f"{bucket}: {e}")
+        if failures:
+            raise ConnectionError("; ".join(failures))
 
     def _get_client_for_sector(self, sector_id):
         if sector_id == SECTOR_SOUTH:
@@ -98,7 +101,7 @@ class InfluxDB3Storage:
     def store_sensor_reading(self, reading: SensorReading):
         try:
             points = []
-            timestamp = datetime.fromtimestamp(reading.timestamp)
+            timestamp = datetime.fromtimestamp(reading.timestamp, tz=timezone.utc)
             sector_id = reading.sector_id or SECTOR_NORTH
 
             if reading.temperature is not None:
@@ -125,47 +128,10 @@ class InfluxDB3Storage:
             logger.error(f"Error storing sensor reading: {e}")
             self.stats["points_failed"] += 1
 
-    def store_valve_status(self, status: ValveStatus):
-        try:
-            timestamp = datetime.fromtimestamp(status.timestamp)
-            sector_id = status.sector_id or SECTOR_NORTH
-            state_value = str(status.state) if isinstance(status.state, dict) else status.state
-            point = Point("valve_status") \
-                .tag("pipeline_id", status.pipeline_id) \
-                .tag("valve_id", status.valve_id) \
-                .tag("sector_id", sector_id) \
-                .field("state", state_value) \
-                .time(timestamp, WritePrecision.NS)
-
-            self._write_points([point], sector_id)
-
-        except Exception as e:
-            logger.error(f"Error storing valve status: {e}")
-            self.stats["points_failed"] += 1
-
-    def store_anomaly_event(self, event: AnomalyEvent):
-        try:
-            timestamp = datetime.fromtimestamp(event.timestamp)
-            sector_id = event.sector_id or SECTOR_NORTH
-            point = Point("anomalies") \
-                .tag("pipeline_id", event.pipeline_id) \
-                .tag("bolt_id", event.bolt_id) \
-                .tag("sector_id", sector_id) \
-                .tag("anomaly_type", event.anomaly_type) \
-                .tag("severity", event.severity) \
-                .field("description", event.description) \
-                .field("temperature", event.sensor_values.get("temperature", 0)) \
-                .field("pressure", event.sensor_values.get("pressure", 0)) \
-                .time(timestamp, WritePrecision.NS)
-
-            self._write_points([point], sector_id)
-
-        except Exception as e:
-            logger.error(f"Error storing anomaly event: {e}")
-            self.stats["points_failed"] += 1
-
     def _write_points(self, points: List[Point], sector_id: str):
         # client handles batching via WriteOptions, just write directly
+        if not points:
+            return
         try:
             client = self._get_client_for_sector(sector_id)
             for point in points:
@@ -176,9 +142,11 @@ class InfluxDB3Storage:
             self.stats["points_written"] += len(points)
             self.stats["by_sector"].setdefault(sector_id, 0)
             self.stats["by_sector"][sector_id] += len(points)
+            self.connected = True
         except Exception as e:
             logger.error(f"Error writing points: {e}")
             self.stats["points_failed"] += len(points)
+            self.connected = False
 
     def query_sensor_data(self, measurement, pipeline_id=None, bolt_id=None,
                          start_time=None, end_time=None, limit=100, sector_id=None):
@@ -188,9 +156,9 @@ class InfluxDB3Storage:
             bolt_id = self._validate_identifier(bolt_id)
 
             if not start_time:
-                start_time = datetime.now() - timedelta(hours=24)
+                start_time = datetime.utcnow() - timedelta(hours=24)
             if not end_time:
-                end_time = datetime.now()
+                end_time = datetime.utcnow()
 
             query = f"""
                 SELECT time, pipeline_id, bolt_id, value
@@ -221,6 +189,7 @@ class InfluxDB3Storage:
                                 "bolt_id": row.get('bolt_id'),
                                 measurement: row.get('value')
                             })
+                    self.connected = True
                 except Exception as e:
                     logger.error(f"Query error on bucket: {e}")
 
@@ -243,7 +212,7 @@ class InfluxDB3Storage:
         try:
             pipeline_id = self._validate_identifier(pipeline_id)
             hours = 24
-            start_time = datetime.now() - timedelta(hours=hours)
+            start_time = datetime.utcnow() - timedelta(hours=hours)
 
             bolts_query = f"""
                 SELECT DISTINCT bolt_id
@@ -269,87 +238,17 @@ class InfluxDB3Storage:
                 except Exception:
                     continue
 
-            anomaly_query = f"""
-                SELECT COUNT(*) as count
-                FROM anomalies
-                WHERE pipeline_id = '{pipeline_id}'
-                AND time >= '{start_time.isoformat()}Z'
-            """
-
-            anomaly_count = 0
-            for client in clients:
-                try:
-                    anomaly_result = client.query(anomaly_query)
-                    if anomaly_result:
-                        df_anomaly = anomaly_result.to_pandas()
-                        if not df_anomaly.empty:
-                            anomaly_count += df_anomaly.iloc[0].get('count', 0)
-                except Exception:
-                    continue
-
             return {
                 "pipeline_id": pipeline_id,
                 "total_bolts": len(bolt_ids),
                 "active_bolts": len(bolt_ids),
-                "anomaly_count": int(anomaly_count),
+                "anomaly_count": 0,
                 "time_range_hours": hours
             }
 
         except Exception as e:
             logger.error(f"Pipeline summary error: {e}")
             return {}
-
-    def query_alerts(self, pipeline_id=None, severity=None, hours=24,
-                    limit=100, sector_id=None):
-        try:
-            pipeline_id = self._validate_identifier(pipeline_id)
-            severity = self._validate_identifier(severity)
-            start_time = datetime.now() - timedelta(hours=hours)
-
-            query = f"""
-                SELECT time, pipeline_id, bolt_id, sector_id, anomaly_type, severity, description, temperature, pressure
-                FROM anomalies
-                WHERE time >= '{start_time.isoformat()}Z'
-            """
-
-            if pipeline_id:
-                query += f" AND pipeline_id = '{pipeline_id}'"
-            if severity:
-                query += f" AND severity = '{severity}'"
-
-            query += f" ORDER BY time DESC LIMIT {limit}"
-
-            clients = self._get_clients_for_query(sector_id)
-
-            data = []
-            for client in clients:
-                try:
-                    result = client.query(query)
-                    if result:
-                        df = result.to_pandas()
-                        for _, row in df.iterrows():
-                            data.append({
-                                "timestamp": row['time'].timestamp() if hasattr(row['time'], 'timestamp') else row['time'],
-                                "pipeline_id": row.get('pipeline_id'),
-                                "bolt_id": row.get('bolt_id'),
-                                "sector_id": row.get('sector_id'),
-                                "anomaly_type": row.get('anomaly_type'),
-                                "severity": row.get('severity'),
-                                "message": row.get('description', ''),
-                                "temperature": row.get('temperature'),
-                                "pressure": row.get('pressure')
-                            })
-                except Exception as e:
-                    logger.error(f"Query alerts error on bucket: {e}")
-
-            self.stats["queries_executed"] += 1
-            data.sort(key=lambda x: x.get('timestamp', 0), reverse=True)
-            return data[:limit]
-
-        except Exception as e:
-            logger.error(f"Query alerts error: {e}")
-            self.stats["queries_failed"] += 1
-            return []
 
     def close(self):
         try:
