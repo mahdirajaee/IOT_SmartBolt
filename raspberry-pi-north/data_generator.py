@@ -3,7 +3,7 @@ import time
 import logging
 import os
 import math
-from typing import Dict
+from typing import Dict, Any
 from dataclasses import dataclass
 
 logger = logging.getLogger(__name__)
@@ -57,11 +57,9 @@ class Bolt:
         self.wave_temp_enabled = True
         self.wave_pressure_enabled = False
 
-        self.health = 100.0
         self.last_update = time.time()
         self.temp_drift = 0.0
         self.pressure_drift = 0.0
-        self.critical_spike_active = False
 
     def _check_critical_spike(self):
         if random.random() < self.config.critical_spike_probability:
@@ -74,17 +72,19 @@ class Bolt:
                 self.config.critical_spike_pressure_min,
                 self.config.critical_spike_pressure_max
             )
+            #logger.warning(f"Bolt {self.bolt_id}: CRITICAL SPIKE - T:{temp_spike:.1f}C P:{pressure_spike:.1f}PSI")
             return True, temp_spike, pressure_spike
         return False, 0.0, 0.0
 
-    def generate_data(self, valve_position=0.0):
+    def generate_data(self):
+
         current_time = time.time()
         time_delta = current_time - self.last_update
 
         if not self.in_wave and current_time >= self.next_wave_time:
             self._start_wave()
 
-        return self._generate_realistic_data(valve_position, time_delta)
+        return self._generate_realistic_data(time_delta)
 
     def _start_wave(self):
         self.in_wave = True
@@ -93,6 +93,7 @@ class Bolt:
         self.wave_pressure_enabled = random.random() < 0.4
         if not self.wave_temp_enabled and not self.wave_pressure_enabled:
             self.wave_temp_enabled = True
+        #logger.info(f"Bolt {self.bolt_id}: Gaussian wave started - temp={self.wave_temp_enabled}, pressure={self.wave_pressure_enabled}")
 
     def _gaussian_deviation(self, t):
         # bell curve math
@@ -101,7 +102,7 @@ class Bolt:
         sigma = duration / 6
         return math.exp(-((t - center) ** 2) / (2 * sigma ** 2))
 
-    def _generate_realistic_data(self, valve_position, time_delta):
+    def _generate_realistic_data(self, time_delta):
         current_time = time.time()
         temp_noise = random.gauss(0, self.config.normal_noise_std)
         pressure_noise = random.gauss(0, self.config.normal_noise_std)
@@ -126,6 +127,7 @@ class Bolt:
                 self.next_wave_time = current_time + random.uniform(
                     self.config.wave_cycle_min, self.config.wave_cycle_max
                 )
+                #logger.info(f"Bolt {self.bolt_id}: Gaussian wave ended, next in {self.next_wave_time - current_time:.0f}s")
 
         raw_temp = self.temp_target + temp_noise + self.temp_drift + wave_temp_effect
         raw_pressure = self.pressure_target + pressure_noise + self.pressure_drift + wave_pressure_effect
@@ -140,24 +142,17 @@ class Bolt:
 
         spike_active, spike_temp, spike_pressure = self._check_critical_spike()
         if spike_active:
-            self.critical_spike_active = True
             self.temperature = spike_temp
             self.pressure = spike_pressure
         else:
-            self.critical_spike_active = False
             self.temperature = max(self.limits.temp_min, min(self.limits.temp_max, self.temperature))
             self.pressure = max(self.limits.pressure_min, min(self.limits.pressure_max, self.pressure))
 
-        self.health = max(0, self.health - random.uniform(0, 0.001))
         self.last_update = current_time
 
         return {
             "temperature": round(self.temperature, 2),
             "pressure": round(self.pressure, 2),
-            "health": round(self.health, 1),
-            "anomaly_active": self.in_wave,
-            "critical_spike": self.critical_spike_active,
-            "valve_position": valve_position
         }
     
 
@@ -166,7 +161,6 @@ class Bolt:
         self.pressure = random.gauss(self.pressure_target, self.config.normal_noise_std)
         self.temp_smooth = self.temperature
         self.pressure_smooth = self.pressure
-        self.health = 100.0
         self.temp_drift = 0.0
         self.pressure_drift = 0.0
         self.in_wave = False
@@ -177,17 +171,10 @@ class Bolt:
         self.last_update = time.time()
 
 class Valve:
-    # valve actuator
-    VALID_STATES = ["open", "closed", "error"]
 
     def __init__(self, valve_id, initial_state="closed"):
         self.valve_id = valve_id
-        self.state = initial_state if initial_state in self.VALID_STATES else "closed"
-        self.position = 0.0 if self.state == "closed" else 100.0
-        self.health = 100.0
-        self.last_command_time = time.time()
-        self.command_count = 0
-        self.error_count = 0
+        self.state = initial_state if initial_state in ["open", "closed"] else "closed"
 
     def set_state(self, new_state):
         if new_state not in ["open", "closed"]:
@@ -198,41 +185,15 @@ class Valve:
             logger.debug(f"Valve {self.valve_id} already in state {new_state}")
             return True
 
-        self.last_command_time = time.time()
-        self.command_count += 1
-
-        if random.random() < 0.02:
-            self.state = "error"
-            self.error_count += 1
-            logger.error(f"Valve {self.valve_id} failed to change to {new_state}")
-            return False
-
         self.state = new_state
-        self.position = 100.0 if new_state == "open" else 0.0
         logger.info(f"Valve {self.valve_id} set to {new_state}")
         return True
-
-    def update(self):
-        self.health = max(0, self.health - 0.001 - (0.01 * self.error_count))
-        return self.get_status()
 
     def get_status(self):
         return {
             "valve_id": self.valve_id,
-            "state": self.state,
-            "position": round(self.position, 1),
-            "health": round(self.health, 1),
-            "command_count": self.command_count,
-            "error_count": self.error_count
+            "state": self.state
         }
-    
-    def reset(self):
-        self.state = "closed"
-        self.position = 0.0
-        self.health = 100.0
-        self.last_command_time = time.time()
-        self.command_count = 0
-        self.error_count = 0
 
 class Pipeline:
 
@@ -260,19 +221,12 @@ class Pipeline:
         bolt_data = {}
         valve_status = {}
 
-        # get valve positions first
-        valve_positions = {}
-        for valve_id, valve in self.valves.items():
-            valve_positions[valve_id] = valve.position
-
-        avg_valve_position = sum(valve_positions.values()) / len(valve_positions) if valve_positions else 0.0
-
         avg_temp = 0.0
         avg_pressure = 0.0
         bolt_count = len(self.bolts)
 
         for bolt_id, bolt in self.bolts.items():
-            bolt_data[bolt_id] = bolt.generate_data(avg_valve_position)
+            bolt_data[bolt_id] = bolt.generate_data()
             avg_temp += bolt_data[bolt_id]["temperature"]
             avg_pressure += bolt_data[bolt_id]["pressure"]
 
@@ -281,8 +235,8 @@ class Pipeline:
             avg_pressure /= bolt_count
 
         for valve_id, valve in self.valves.items():
-            valve_status[valve_id] = valve.update()
-# ? 
+            valve_status[valve_id] = valve.get_status()
+
         active_valves = sum(1 for v in self.valves.values() if v.state == "open")
 
         self.data_points_generated += 1
@@ -297,8 +251,7 @@ class Pipeline:
             "system_status": {
                 "avg_temperature": round(avg_temp, 2),
                 "avg_pressure": round(avg_pressure, 2),
-                "active_valves": active_valves,
-                "valve_effectiveness": round(avg_valve_position, 1)
+                "active_valves": active_valves
             },
             "metadata": {
                 "data_points": self.data_points_generated,

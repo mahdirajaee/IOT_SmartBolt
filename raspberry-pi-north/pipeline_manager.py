@@ -18,7 +18,7 @@ class PipelineManager:
         self.observers: List[Callable] = []
         self.sensor_limits = None
         self.sector_id = os.getenv("SECTOR_ID", "sector-unknown")
-        self.resource_catalog_url = os.getenv("CATALOG_URL", "http://localhost:8081")
+        self.catalog_url = os.getenv("CATALOG_URL", "http://localhost:8081")
         self.sync_interval = int(os.getenv("CATALOG_SYNC_INTERVAL", 30))
         self.last_sync_time = 0
         self.sync_thread = None
@@ -44,7 +44,7 @@ class PipelineManager:
 
         logger.info(f"Sensor limits loaded: temp [{self.sensor_limits.temp_min}-{self.sensor_limits.temp_max}], "
                    f"pressure [{self.sensor_limits.pressure_min}-{self.sensor_limits.pressure_max}]")
-        logger.info("Pipelines will be discovered dynamically from Resource Catalog")
+        logger.info("Pipelines will be discovered dynamically from Catalog")
     
     def get_pipeline(self, pipeline_id):
         with self.config_lock:
@@ -124,7 +124,6 @@ class PipelineManager:
                         "pipeline_id": pid,
                         "temperature": bolt.temperature,
                         "pressure": bolt.pressure,
-                        "health": bolt.health
                     })
         return bolts
     
@@ -197,7 +196,7 @@ class PipelineManager:
     def sync_with_catalog(self):
         try:
             cfg_resp = requests.get(
-                f"{self.resource_catalog_url}/config",
+                f"{self.catalog_url}/config",
                 params={"section": "global"}, timeout=5
             )
             if cfg_resp.status_code == 200:
@@ -210,7 +209,7 @@ class PipelineManager:
             logger.debug(f"Could not fetch config from catalog: {e}")
 
         try:
-            response = requests.get(f"{self.resource_catalog_url}/pipelines", timeout=10)
+            response = requests.get(f"{self.catalog_url}/pipelines", timeout=10)
             if response.status_code != 200:
                 logger.warning(f"Failed to fetch pipelines from catalog: {response.status_code}")
                 return False
@@ -233,7 +232,7 @@ class PipelineManager:
                     logger.info(f"Found new pipeline in catalog for {self.sector_id}: {pipeline_id}")
 
                     detail_response = requests.get(
-                        f"{self.resource_catalog_url}/pipelines/{pipeline_id}",
+                        f"{self.catalog_url}/pipelines/{pipeline_id}",
                         timeout=10
                     )
 
@@ -244,12 +243,23 @@ class PipelineManager:
                     else:
                         logger.warning(f"Failed to get details for pipeline {pipeline_id}")
 
+            catalog_pipeline_ids = {
+                pid for pid, info in catalog_pipelines.items()
+                if info.get("sector_id", "sector-unknown") == self.sector_id
+            }
+            local_pipeline_ids = set(self.pipelines.keys())
+            removed_ids = local_pipeline_ids - catalog_pipeline_ids
+
+            for pipeline_id in removed_ids:
+                logger.info(f"Pipeline {pipeline_id} no longer in catalog, removing")
+                self.remove_pipeline(pipeline_id)
+
             logger.debug(f"Sector {self.sector_id} has {sector_pipeline_count} pipelines in catalog, "
                         f"{len(self.pipelines)} currently loaded")
 
-            if new_pipelines_added:
+            if new_pipelines_added or removed_ids:
                 self._notify_observers()
-                logger.info(f"Pipeline synchronization completed for {self.sector_id} with new additions")
+                logger.info(f"Pipeline sync completed for {self.sector_id}: +{int(new_pipelines_added)} -{len(removed_ids)}")
 
             return True
 
@@ -316,7 +326,7 @@ class PipelineManager:
     def update_catalog_bolt_status(self, bolt_id, temperature, pressure):
         try:
             response = requests.put(
-                f"{self.resource_catalog_url}/bolts/{bolt_id}",
+                f"{self.catalog_url}/bolts/{bolt_id}",
                 json={"temperature": temperature, "pressure": pressure},
                 timeout=5
             )
@@ -330,7 +340,7 @@ class PipelineManager:
     def update_catalog_valve_status(self, valve_id, state):
         try:
             response = requests.put(
-                f"{self.resource_catalog_url}/valves/{valve_id}",
+                f"{self.catalog_url}/valves/{valve_id}",
                 json={"state": state},
                 timeout=5
             )

@@ -3,6 +3,7 @@ import json
 import time
 import threading
 import logging
+import requests
 from dotenv import load_dotenv
 
 from pipeline_manager import PipelineManager
@@ -19,7 +20,7 @@ class SensorSimulator:
         self.mqtt_port = int(os.getenv("MQTT_PORT", 1883))
         self.mqtt_client_id = os.getenv("MQTT_CLIENT_ID", "sensor-simulator-north")
         self.publish_interval = int(os.getenv("PUBLISH_INTERVAL", 5))
-        self.resource_catalog_url = os.getenv("CATALOG_URL", "http://localhost:8081")
+        self.catalog_url = os.getenv("CATALOG_URL", "http://localhost:8081")
         self.service_name = os.getenv("REGISTRATION_NAME", "raspberry_pi_north")
         
         self.pipeline_manager = PipelineManager()
@@ -63,7 +64,7 @@ class SensorSimulator:
             if not self.mqtt_publisher.connect():
                 logger.error("Failed to connect to MQTT broker")
                 return False
-            
+
             self.pipeline_manager.add_observer(self._on_config_change)
             
             logger.info("Sensor simulator initialized successfully")
@@ -170,7 +171,7 @@ class SensorSimulator:
         except Exception as e:
             logger.error(f"Error saving data to file: {e}")
     
-    def _handle_valve_command(self, payload):
+    def _handle_valve_command(self, topic, payload):
         try:
             pipeline_id = payload.get("pipeline_id")
             valve_id = payload.get("valve_id")
@@ -190,40 +191,22 @@ class SensorSimulator:
             if success:
                 self.stats["valve_commands_received"] += 1
                 logger.info(f"Valve {valve_id} in pipeline {pipeline_id} set to {command}")
-                
-                self.mqtt_publisher.publish_event("valve_changed", {
-                    "pipeline_id": pipeline_id,
-                    "valve_id": valve_id,
-                    "state": normalized_command,
-                    "success": success
-                })
             else:
                 logger.error(f"Failed to set valve {valve_id} in pipeline {pipeline_id}")
-                
+
+            self.mqtt_publisher.publish_event("valve_changed", {
+                "pipeline_id": pipeline_id,
+                "valve_id": valve_id,
+                "state": normalized_command,
+                "success": success
+            })
+
         except Exception as e:
             logger.error(f"Error handling valve command: {e}")
     
     def _on_config_change(self, config):
         logger.info("Pipeline configuration changed")
-    
-    def _register_in_catalog(self):
-        try:
-            from common_utils import CatalogClient
-            port = int(os.getenv('SERVICE_PORT', 8086))
-            client = CatalogClient(self.resource_catalog_url)
-            if client.register_service(
-                name=self.service_name,
-                host="localhost",
-                port=port,
-                description="Raspberry Pi North sensor simulator"
-            ):
-                logger.info("Successfully registered with resource catalog")
-            else:
-                logger.warning("Resource catalog registration failed")
-        
-        except Exception as e:
-            logger.warning(f"Could not register with catalog: {e}")
-            
+
     def get_status(self):
         return {
             "running": self.running,

@@ -40,7 +40,6 @@ class RaspberryPiWebService(object):
     @cherrypy.expose
     @cherrypy.tools.json_out()
     def GET(self, *path, **query):
-
         if not path:
             return {
                 "service": "Raspberry Pi Sensor Simulator v2.0",
@@ -52,7 +51,6 @@ class RaspberryPiWebService(object):
                     "status": "/status",
                     "pipelines": "/pipelines",
                     "data": "/data/<pipeline_id>",
-                    "control": "/control",
                     "sync": "/sync",
                     "sync_catalog": "/sync/catalog"
                 }
@@ -80,7 +78,7 @@ class RaspberryPiWebService(object):
                 "last_sync": self.pipeline_manager.last_sync_time,
                 "sync_interval": self.pipeline_manager.sync_interval,
                 "sync_running": self.pipeline_manager.sync_running,
-                "catalog_url": self.pipeline_manager.resource_catalog_url
+                "catalog_url": self.pipeline_manager.catalog_url
             }
             return status
             
@@ -124,151 +122,13 @@ class RaspberryPiWebService(object):
                 return {
                     "last_sync": self.pipeline_manager.last_sync_time,
                     "sync_interval": self.pipeline_manager.sync_interval,
-                    "catalog_url": self.pipeline_manager.resource_catalog_url,
+                    "catalog_url": self.pipeline_manager.catalog_url,
                     "sync_running": self.pipeline_manager.sync_running
                 }
 
         else:
             cherrypy.response.status = 404
             return {"error": f"Endpoint '{endpoint}' not found"}
-    
-    @cherrypy.expose
-    @cherrypy.tools.json_out()
-    @cherrypy.tools.json_in()
-    def POST(self, *path, **query):
-        if not path:
-            cherrypy.response.status = 400
-            return {"error": "Endpoint required"}
-            
-        endpoint = path[0]
-        
-        if endpoint == "pipelines":
-            data = cherrypy.request.json
-            pipeline_id = data.get("id")
-            sensors = data.get("sensors", [])
-            valves = data.get("valves", [])
-            
-            if not pipeline_id:
-                cherrypy.response.status = 400
-                return {"error": "Pipeline ID required"}
-            
-            sensor_tuples = [(s.get("id"), s.get("type", "temp")) for s in sensors]
-            valve_tuples = [(v.get("id"), v.get("state", "closed")) for v in valves]
-            
-            if self.pipeline_manager.add_pipeline(pipeline_id, sensor_tuples, valve_tuples):
-                return {"message": f"Pipeline {pipeline_id} created successfully"}
-            else:
-                cherrypy.response.status = 409
-                return {"error": f"Pipeline {pipeline_id} already exists"}
-                
-        elif endpoint == "control":
-            data = cherrypy.request.json
-            command = data.get("command")
-            
-            if command == "start":
-                if self.simulator.start():
-                    return {"message": "Simulator started"}
-                else:
-                    return {"message": "Simulator already running"}
-            
-            elif command == "stop":
-                self.simulator.stop()
-                return {"message": "Simulator stopped"}
-            
-            elif command == "reset":
-                self.pipeline_manager.reset_all()
-                return {"message": "All pipelines reset"}
-            
-            elif command == "reload":
-                self.pipeline_manager.reload_configuration()
-                return {"message": "Configuration reloaded"}
-            
-            else:
-                cherrypy.response.status = 400
-                return {"error": f"Unknown command: {command}"}
-                
-        else:
-            cherrypy.response.status = 404
-            return {"error": f"POST endpoint '{endpoint}' not found"}
-    
-    @cherrypy.expose
-    @cherrypy.tools.json_out()
-    @cherrypy.tools.json_in()
-    def PUT(self, *path, **query):
-        # update stuff
-        if not path:
-            cherrypy.response.status = 400
-            return {"error": "Endpoint required"}
-            
-        endpoint = path[0]
-        
-        if endpoint == "pipelines":
-            pipeline_id = path[1] if len(path) > 1 else None
-            if not pipeline_id:
-                cherrypy.response.status = 400
-                return {"error": "Pipeline ID required"}
-            
-            data = cherrypy.request.json
-            status = data.get("status")
-            
-            if status:
-                if self.pipeline_manager.update_pipeline_status(pipeline_id, status):
-                    return {"message": f"Pipeline {pipeline_id} status updated to {status}"}
-                else:
-                    cherrypy.response.status = 404
-                    return {"error": f"Pipeline {pipeline_id} not found"}
-            else:
-                cherrypy.response.status = 400
-                return {"error": "No valid updates provided"}
-                
-        elif endpoint == "valves":
-            valve_id = path[1] if len(path) > 1 else None
-            if not valve_id:
-                cherrypy.response.status = 400
-                return {"error": "Valve ID required"}
-            
-            data = cherrypy.request.json
-            pipeline_id = data.get("pipeline_id")
-            state = data.get("state")
-            
-            if not all([pipeline_id, state]):
-                cherrypy.response.status = 400
-                return {"error": "Pipeline ID and state required"}
-            
-            if self.pipeline_manager.set_valve_state(pipeline_id, valve_id, state):
-                return {"message": f"Valve {valve_id} set to {state}"}
-            else:
-                cherrypy.response.status = 404
-                return {"error": f"Valve {valve_id} not found in pipeline {pipeline_id}"}
-                
-        else:
-            cherrypy.response.status = 404
-            return {"error": f"PUT endpoint '{endpoint}' not found"}
-    
-    @cherrypy.expose
-    @cherrypy.tools.json_out()
-    def DELETE(self, *path, **query):
-        if not path:
-            cherrypy.response.status = 400
-            return {"error": "Endpoint required"}
-            
-        endpoint = path[0]
-        
-        if endpoint == "pipelines":
-            pipeline_id = path[1] if len(path) > 1 else None
-            if not pipeline_id:
-                cherrypy.response.status = 400
-                return {"error": "Pipeline ID required"}
-            
-            if self.pipeline_manager.remove_pipeline(pipeline_id):
-                return {"message": f"Pipeline {pipeline_id} deleted successfully"}
-            else:
-                cherrypy.response.status = 404
-                return {"error": f"Pipeline {pipeline_id} not found"}
-                
-        else:
-            cherrypy.response.status = 404
-            return {"error": f"DELETE endpoint '{endpoint}' not found"}
     
 
 def signal_handler(signum, frame):
@@ -298,7 +158,7 @@ if __name__ == '__main__':
             'tools.response_headers.headers': [
                 ('Content-Type', 'application/json'),
                 ('Access-Control-Allow-Origin', '*'),
-                ('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE'),
+                ('Access-Control-Allow-Methods', 'GET'),
                 ('Access-Control-Allow-Headers', 'Content-Type')
             ]
         }
@@ -308,7 +168,7 @@ if __name__ == '__main__':
     app = RaspberryPiWebService()
     
     cherrypy.config.update(config['global'])
-    cherrypy.engine.subscribe("stop", app.simulator.shutdown)
+    
     cherrypy.tree.mount(app, '/', config)
 
     catalog_url = os.getenv("CATALOG_URL", "http://localhost:8081")

@@ -85,17 +85,10 @@ class MQTTPublisher:
         for bolt_id, readings in bolt_data.items():
             senml["e"].append({"n": f"{bolt_id}/temperature", "u": "Cel", "v": readings.get("temperature", 0)})
             senml["e"].append({"n": f"{bolt_id}/pressure", "u": "PSI", "v": readings.get("pressure", 0)})
-            senml["e"].append({"n": f"{bolt_id}/health", "u": "/", "v": readings.get("health", 0)})
-            senml["e"].append({"n": f"{bolt_id}/anomaly_active", "vb": readings.get("anomaly_active", False)})
-            senml["e"].append({"n": f"{bolt_id}/critical_spike", "vb": readings.get("critical_spike", False)})
 
         for valve_id, status in valve_status.items():
             state = status.get("state") if isinstance(status, dict) else status
-            position = status.get("position", 0) if isinstance(status, dict) else 0
-            health = status.get("health", 100) if isinstance(status, dict) else 100
             senml["e"].append({"n": f"{valve_id}/state", "vs": state})
-            senml["e"].append({"n": f"{valve_id}/position", "u": "/", "v": position})
-            senml["e"].append({"n": f"{valve_id}/health", "u": "/", "v": health})
 
         return senml
 

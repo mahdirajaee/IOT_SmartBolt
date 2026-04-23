@@ -15,10 +15,11 @@ class PipelineManager:
     def __init__(self):
         self.config_lock = threading.Lock()
         self.pipelines: Dict[str, Pipeline] = {}
-        self.observers: List[Callable] = []
+        self.observers = []
+        self.observers:list[Callable]
         self.sensor_limits = None
         self.sector_id = os.getenv("SECTOR_ID", "sector-unknown")
-        self.resource_catalog_url = os.getenv("CATALOG_URL", "http://localhost:8081")
+        self.catalog_url = os.getenv("CATALOG_URL", "http://localhost:8081")
         self.sync_interval = int(os.getenv("CATALOG_SYNC_INTERVAL", 45))  # slower network here
         self.last_sync_time = 0
         self.sync_thread = None
@@ -44,7 +45,7 @@ class PipelineManager:
 
         logger.info(f"Sensor limits loaded: temp [{self.sensor_limits.temp_min}-{self.sensor_limits.temp_max}], "
                    f"pressure [{self.sensor_limits.pressure_min}-{self.sensor_limits.pressure_max}]")
-        logger.info("Pipelines will be discovered dynamically from Resource Catalog")
+        logger.info("Pipelines will be discovered dynamically from Catalog")
     
     def get_pipeline(self, pid):
         with self.config_lock:
@@ -66,13 +67,13 @@ class PipelineManager:
                 }
             return config
     
-    def add_pipeline(self, pipeline_id, sensors, valves):
+    def add_pipeline(self, pid, sensors, valves):
         with self.config_lock:
-            if pipeline_id in self.pipelines:
-                logger.warning(f"Pipeline {pipeline_id} exists")
+            if pid in self.pipelines:
+                logger.warning(f"Pipeline {pid} exists")
                 return False
 
-            pipeline = Pipeline(pipeline_id)
+            pipeline = Pipeline(pid)
 
             bolt_ids = set()
             for sensor_id, sensor_type in sensors:
@@ -84,32 +85,32 @@ class PipelineManager:
             for valve_id, valve_state in valves:
                 pipeline.add_valve(valve_id, valve_state)
 
-            self.pipelines[pipeline_id] = pipeline
-            logger.info(f"Added pipeline {pipeline_id}")
+            self.pipelines[pid] = pipeline
+            logger.info(f"Added pipeline {pid}")
         
         self._notify_observers()
         return True
     
-    def remove_pipeline(self, pipeline_id):
+    def remove_pipeline(self, pid):
         with self.config_lock:
-            if pipeline_id in self.pipelines:
-                del self.pipelines[pipeline_id]
-                logger.info(f"Removed {pipeline_id}")
+            if pid in self.pipelines:
+                del self.pipelines[pid]
+                logger.info(f"Removed {pid}")
                 self._notify_observers()
                 return True
             return False
     
-    def update_pipeline_status(self, pipeline_id, status):
+    def update_pipeline_status(self, pid, status):
         with self.config_lock:
-            if pipeline_id in self.pipelines:
-                self.pipelines[pipeline_id].status = status
-                logger.info(f"Updated {pipeline_id} to {status}")
+            if pid in self.pipelines:
+                self.pipelines[pid].status = status
+                logger.info(f"Updated {pid} to {status}")
                 self._notify_observers()
                 return True
             return False
     
-    def set_valve_state(self, pipeline_id, valve_id, state):
-        pipeline = self.get_pipeline(pipeline_id)
+    def set_valve_state(self, pid, valve_id, state):
+        pipeline = self.get_pipeline(pid)
         if pipeline:
             return pipeline.set_valve_state(valve_id, state)
         return False
@@ -124,7 +125,6 @@ class PipelineManager:
                         "pipeline_id": pid,
                         "temperature": bolt.temperature,
                         "pressure": bolt.pressure,
-                        "health": bolt.health
                     })
         return bolts
     
@@ -140,14 +140,12 @@ class PipelineManager:
                     })
         return valves
     
-    def add_observer(self, callback):
-        self.observers.append(callback)
-        logger.debug(f"Added configuration observer: {callback.__name__}")
+    def add_observer(self, cb):
+        self.observers.append(cb)
 
-    def remove_observer(self, callback):
-        if callback in self.observers:
-            self.observers.remove(callback)
-            logger.debug(f"Removed configuration observer: {callback.__name__}")
+    def remove_observer(self, cb):
+        if cb in self.observers:
+            self.observers.remove(cb)
 
     def _notify_observers(self):
         config = self.get_pipeline_config()
@@ -158,7 +156,6 @@ class PipelineManager:
                 logger.error(f"Error notifying observer {callback.__name__}: {e}")
     
     def reload_configuration(self):
-        logger.info("Reloading pipeline configuration")
         self._load_configuration()
 
     def get_statistics(self):
@@ -197,7 +194,7 @@ class PipelineManager:
     def sync_with_catalog(self):
         try:
             cfg_resp = requests.get(
-                f"{self.resource_catalog_url}/config",
+                f"{self.catalog_url}/config",
                 params={"section": "global"}, timeout=5
             )
             if cfg_resp.status_code == 200:
@@ -210,7 +207,7 @@ class PipelineManager:
             logger.debug(f"Could not fetch config from catalog: {e}")
 
         try:
-            response = requests.get(f"{self.resource_catalog_url}/pipelines", timeout=10)
+            response = requests.get(f"{self.catalog_url}/pipelines", timeout=10)
             if response.status_code != 200:
                 logger.warning(f"Failed to fetch pipelines from catalog: {response.status_code}")
                 return False
@@ -233,7 +230,7 @@ class PipelineManager:
                     logger.info(f"Found new pipeline in catalog for {self.sector_id}: {pipeline_id}")
 
                     detail_response = requests.get(
-                        f"{self.resource_catalog_url}/pipelines/{pipeline_id}",
+                        f"{self.catalog_url}/pipelines/{pipeline_id}",
                         timeout=10
                     )
 
@@ -244,12 +241,23 @@ class PipelineManager:
                     else:
                         logger.warning(f"Failed to get details for pipeline {pipeline_id}")
 
+            catalog_pipeline_ids = {
+                pid for pid, info in catalog_pipelines.items()
+                if info.get("sector_id", "sector-unknown") == self.sector_id
+            }
+            local_pipeline_ids = set(self.pipelines.keys())
+            removed_ids = local_pipeline_ids - catalog_pipeline_ids
+
+            for pipeline_id in removed_ids:
+                logger.info(f"Pipeline {pipeline_id} no longer in catalog, removing")
+                self.remove_pipeline(pipeline_id)
+
             logger.debug(f"Sector {self.sector_id} has {sector_pipeline_count} pipelines in catalog, "
                         f"{len(self.pipelines)} currently loaded")
 
-            if new_pipelines_added:
+            if new_pipelines_added or removed_ids:
                 self._notify_observers()
-                logger.info(f"Pipeline synchronization completed for {self.sector_id} with new additions")
+                logger.info(f"Pipeline sync completed for {self.sector_id}: +{int(new_pipelines_added)} -{len(removed_ids)}")
 
             return True
 
@@ -260,17 +268,16 @@ class PipelineManager:
             logger.error(f"Unexpected error during sync: {e}")
             return False
 
-    def _add_pipeline_from_catalog(self, pipeline_id, catalog_data):
+    def _add_pipeline_from_catalog(self, pid, catalog_data):
         with self.config_lock:
-            if pipeline_id in self.pipelines:
-                logger.debug(f"Pipeline {pipeline_id} already exists, skipping")
+            if pid in self.pipelines:
                 return
 
             pipeline_info = catalog_data.get("pipeline", {})
             bolts_info = catalog_data.get("bolts", [])
             valves_info = catalog_data.get("valves", [])
 
-            pipeline = Pipeline(pipeline_id)
+            pipeline = Pipeline(pid)
 
             for bolt_info in bolts_info:
                 bolt_id = bolt_info.get("id")
@@ -287,36 +294,32 @@ class PipelineManager:
                         limits = self.sensor_limits
 
                     pipeline.add_bolt(bolt_id, limits)
-                    logger.debug(f"Added bolt {bolt_id} to pipeline {pipeline_id}")
 
             for valve_info in valves_info:
                 valve_id = valve_info.get("id")
                 if valve_id:
                     valve_state = valve_info.get("current_state", "closed")
                     pipeline.add_valve(valve_id, valve_state)
-                    logger.debug(f"Added valve {valve_id} to pipeline {pipeline_id}")
 
             pipeline.status = pipeline_info.get("status", "active")
 
-            self.pipelines[pipeline_id] = pipeline
-            logger.info(f"Successfully added pipeline {pipeline_id} from catalog with {len(bolts_info)} bolts and {len(valves_info)} valves")
+            self.pipelines[pid] = pipeline
+            logger.info(f"Added {pid} from catalog")
 
     def stop_catalog_sync(self):
         self.sync_running = False
         if self.sync_thread and self.sync_thread.is_alive():
             self.sync_thread.join(timeout=5)
-        logger.info("Stopped catalog sync thread")
 
     def reset_all(self):
         with self.config_lock:
             for pipeline in self.pipelines.values():
                 pipeline.reset()
-        logger.info("All pipelines reset")
 
     def update_catalog_bolt_status(self, bolt_id, temp, pressure):
         try:
             response = requests.put(
-                f"{self.resource_catalog_url}/bolts/{bolt_id}",
+                f"{self.catalog_url}/bolts/{bolt_id}",
                 json={"temperature": temp, "pressure": pressure},
                 timeout=5
             )
@@ -330,7 +333,7 @@ class PipelineManager:
     def update_catalog_valve_status(self, valve_id, state):
         try:
             response = requests.put(
-                f"{self.resource_catalog_url}/valves/{valve_id}",
+                f"{self.catalog_url}/valves/{valve_id}",
                 json={"state": state},
                 timeout=5
             )
