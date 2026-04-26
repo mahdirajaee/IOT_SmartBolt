@@ -62,10 +62,6 @@ class AnomalyDetector:
         self.pattern_buffer = {}
         self.max_history_size = 100 
 
-    def update_thresholds(self, new_thresholds: Dict[str, Any]):
-        for key, value in new_thresholds.items():
-            if hasattr(self.thresholds, key):
-                setattr(self.thresholds, key, value)
     
     def detect_anomaly(self,
                       pipeline_id: str,
@@ -405,9 +401,3 @@ class AnomalyDetector:
         }
         return severity_map.get(severity, 0)
     
-    def get_device_stats(self, device_id: str) -> Dict[str, Any]:
-        return {
-            "anomaly_count": self.anomaly_counts.get(device_id, {}).get("count", 0),
-            "history_size": len(self.history.get(device_id, [])),
-            "last_values": self.last_values.get(device_id, {})
-        }

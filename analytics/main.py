@@ -4,7 +4,6 @@ import requests
 import os
 import time
 import threading
-from datetime import datetime, timedelta
 from dotenv import load_dotenv
 import logging
 import sys

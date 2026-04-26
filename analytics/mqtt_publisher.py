@@ -20,13 +20,6 @@ class MQTTPublisher:
         self.mqtt = MyMQTT(self.client_id, self.broker, self.port, self)
         self.connected = False
 
-    def notify(self, topic, payload):
-        try:
-            data = json.loads(payload)
-            logger.debug(f"Analytics command received on {topic}: {data}")
-        except Exception as e:
-            logger.error(f"Error processing analytics command: {e}")
-
     def connect(self):
         try:
             self.mqtt.start()
@@ -37,11 +30,6 @@ class MQTTPublisher:
         except Exception as e:
             logger.error(f"MQTT connection error: {e}")
             return False
-
-    def disconnect(self):
-        self.mqtt.stop()
-        self.connected = False
-        logger.info("MQTT publisher disconnected")
 
     def start_publisher(self):
         logger.info("Alert publisher ready (using MyMQTT)")
@@ -75,22 +63,6 @@ class MQTTPublisher:
             "anomaly_count": anomaly_data.get("anomaly_count", 0),
             "anomaly_rate": anomaly_data.get("anomaly_rate", 0),
             "message": f"Anomaly detected in {sensor_type} for {bolt_id} on pipeline {pipeline_id}"
-        }
-        self.queue_alert(alert)
-        return alert
-
-    def publish_threshold_alert(self, pipeline_id, bolt_id, sensor_type, value, threshold, sector_id="sector-unknown"):
-        alert = {
-            "alert_type": "threshold_exceeded",
-            "sector_id": sector_id,
-            "pipeline_id": pipeline_id,
-            "bolt_id": bolt_id,
-            "sensor_type": sensor_type,
-            "timestamp": time.time(),
-            "value": value,
-            "threshold": threshold,
-            "exceeded_by": round(value - threshold, 2),
-            "message": f"{sensor_type.capitalize()} threshold exceeded: {value} > {threshold}"
         }
         self.queue_alert(alert)
         return alert
@@ -138,19 +110,3 @@ class MQTTPublisher:
             return alert
         return None
 
-    def publish_health_alert(self, pipeline_id, bolt_id, health_score, health_status, sector_id="sector-unknown"):
-        health_threshold = int(os.getenv("HEALTH_ALERT_THRESHOLD", 40))
-        if health_score < health_threshold:
-            alert = {
-                "alert_type": "health_warning",
-                "sector_id": sector_id,
-                "pipeline_id": pipeline_id,
-                "bolt_id": bolt_id,
-                "timestamp": time.time(),
-                "health_score": health_score,
-                "health_status": health_status,
-                "message": f"Poor health status detected: {health_status} (score: {health_score})"
-            }
-            self.queue_alert(alert)
-            return alert
-        return None

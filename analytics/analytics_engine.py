@@ -1,7 +1,5 @@
 
 import statistics
-import math
-from datetime import datetime, timedelta
 import logging
 
 logger = logging.getLogger(__name__)
@@ -31,8 +29,8 @@ class AnalyticsEngine:
         x_values = list(range(len(values)))
         
         n = len(values)
-        sum_x = sum(x_values)
-        sum_y = sum(values)
+        sum_x = sum(x_values) # x-values are the time intervals
+        sum_y = sum(values)  # y-values are the sensor readings
         sum_xy = sum(x * y for x, y in zip(x_values, values))
         sum_x2 = sum(x * x for x in x_values)
         
@@ -44,10 +42,9 @@ class AnalyticsEngine:
         intercept = (sum_y - slope * sum_x) / n
         
         y_mean = sum_y / n
-        ss_tot = sum((y - y_mean) ** 2 for y in values)
-        ss_res = sum((y - (slope * x + intercept)) ** 2 for x, y in zip(x_values, values))
-
-        r_squared = 1 - (ss_res / ss_tot) if ss_tot != 0 else 0
+        ss_tot = sum((y - y_mean) ** 2 for y in values) # measures how spread out the data is
+        ss_res = sum((y - (slope * x + intercept)) ** 2 for x, y in zip(x_values, values)) # measures how far the data is from the predicted values
+        r_squared = 1 - (ss_res / ss_tot) if ss_tot != 0 else 0 # how well the data fits the trend
 
         if abs(slope) < 0.01:
             trend = "stable"
@@ -84,7 +81,7 @@ class AnalyticsEngine:
             "max": max(values),
             "mean": round(mean_val, 2),
             "median": round(median_val, 2),
-            "std_dev": round(statistics.stdev(values), 2) if len(values) > 1 else 0,
+            "std_dev": round(statistics.stdev(values), 2) if len(values) > 1 else 0, # high -> sensor has fluctuations, low -> good sensor
             "variance": round(statistics.variance(values), 2) if len(values) > 1 else 0,
             "percentile_25": round(percentile_25, 2),
             "percentile_75": round(percentile_75, 2),
@@ -92,7 +89,8 @@ class AnalyticsEngine:
             "count": len(values)
         }
     
-    def detect_anomalies_zscore(self, values, threshold=2.5):
+    # z-score formula : (value - mean) / std_dev
+    def detect_anomalies_zscore(self, values, threshold=2.5): # automatically finds unusual spikes | drops outliers
         if len(values) < 3:
             return []
 
@@ -200,40 +198,6 @@ class AnalyticsEngine:
             return "low"
         else:
             return "none"
-    
-    def calculate_correlation(self, values1, values2):
-        if len(values1) < 2 or len(values2) < 2:
-            return {"correlation": "insufficient_data", "coefficient": 0}
-
-        min_len = min(len(values1), len(values2))
-        values1 = values1[:min_len]
-        values2 = values2[:min_len]
-
-        try:
-            correlation = statistics.correlation(values1, values2)
-            
-            if abs(correlation) >= 0.9:
-                strength = "very_strong"
-            elif abs(correlation) >= 0.7:
-                strength = "strong"
-            elif abs(correlation) >= 0.5:
-                strength = "moderate"
-            elif abs(correlation) >= 0.3:
-                strength = "weak"
-            else:
-                strength = "negligible"
-            
-            direction = "positive" if correlation > 0 else "negative"
-            
-            return {
-                "correlation": f"{strength}_{direction}",
-                "coefficient": round(correlation, 4),
-                "strength": strength,
-                "direction": direction
-            }
-        except Exception as e:
-            logger.error(f"Correlation calculation error: {e}")
-            return {"correlation": "calculation_error", "coefficient": 0}
     
     def predict_next_values(self, values, num_predictions=5):
         if len(values) < 3:
