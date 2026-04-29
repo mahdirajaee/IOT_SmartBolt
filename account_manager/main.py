@@ -13,6 +13,7 @@ import time
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from common_utils import CatalogClient
+from internal_auth import resolve_internal_api_key
 
 load_dotenv()
 
@@ -25,6 +26,7 @@ class AccountManagerWebService(object):
     def __init__(self):
         self.db = DatabaseManager()
         self.auth = AuthManager()
+        self.internal_api_key = resolve_internal_api_key("account_manager")
         self.init_default_admin()
         self.start_cleanup_thread()
     
@@ -45,7 +47,7 @@ class AccountManagerWebService(object):
                     role='admin'
                 )
                 logger.info(f"Default admin user created with ID: {user_id}")
-                logger.warning("password ro bayad avaz konim! ")
+                logger.warning("Default admin password should be changed in production")
 
         except Exception as e:
             logger.error(f"Failed to create default admin: {e}")
@@ -108,6 +110,13 @@ class AccountManagerWebService(object):
             return None, self.json_response({"error": "Insufficient permissions"}, 403)
         
         return user, None
+
+    def require_internal_auth(self):
+        provided_key = cherrypy.request.headers.get('X-Internal-API-Key')
+        if not provided_key or provided_key != self.internal_api_key:
+            cherrypy.response.status = 401
+            return False, self.json_response({"error": "Internal authentication required"}, 401)
+        return True, None
     
     def GET(self, *path, **query):
         try:
@@ -124,7 +133,6 @@ class AccountManagerWebService(object):
                         },
                         "users": {
                             "GET /users": "List all users (admin only)",
-                            "GET /users/{id}": "Get user details",
                             "PUT /users/{id}": "Update user",
                             "DELETE /users/{id}": "Delete user (admin only)"
                         }
@@ -137,6 +145,10 @@ class AccountManagerWebService(object):
                 return self.json_response({"status": "healthy"})
 
             if endpoint == "internal":
+                internal_ok, error = self.require_internal_auth()
+                if not internal_ok:
+                    return error
+
                 if len(path) >= 2 and path[1] == "users":
                     if len(path) == 2:
                         users = self.db.get_all_users()
@@ -183,34 +195,20 @@ class AccountManagerWebService(object):
                 })
             
             elif endpoint == "users":
-                if len(path) == 1:
-                    user, error = self.require_auth('admin')
-                    if error:
-                        return error
-                    
-                    users = self.db.get_all_users()
-                    users_list = []
-                    for row in users:
-                        user_obj = User.from_db_row(row)
-                        users_list.append(user_obj.to_dict())
-                    
-                    return self.json_response({"users": users_list})
-                
-                elif len(path) == 2:
-                    user_id = path[1]
-                    current_user, error = self.require_auth('viewer')
-                    if error:
-                        return error
+                if len(path) != 1:
+                    return self.json_response({"error": f"Endpoint '/users/{'/'.join(path[1:])}' not found"}, 404)
 
-                    if current_user.role != 'admin' and str(current_user.id) != user_id:
-                        return self.json_response({"error": "Cannot view other users"}, 403)
+                user, error = self.require_auth('admin')
+                if error:
+                    return error
 
-                    user = self.db.get_user_by_id(int(user_id))
-                    if not user:
-                        return self.json_response({"error": "User not found"}, 404)
+                users = self.db.get_all_users()
+                users_list = []
+                for row in users:
+                    user_obj = User.from_db_row(row)
+                    users_list.append(user_obj.to_dict())
 
-                    user_obj = User.from_db_row(user)
-                    return self.json_response({"user": user_obj.to_dict()})
+                return self.json_response({"users": users_list})
 
             else:
                 return self.json_response({"error": f"Endpoint '{endpoint}' not found"}, 404)
@@ -337,11 +335,16 @@ class AccountManagerWebService(object):
             
             if endpoint == "internal":
                 if len(path) >= 3 and path[1] == "users":
+                    internal_ok, error = self.require_internal_auth()
+                    if not internal_ok:
+                        return error
+
                     user_id = int(path[2])
                     input_data = json.loads(cherrypy.request.body.read())
-                    chat_id = input_data.get("telegram_chat_id") or input_data.get("chatID")
-                    if chat_id is not None:
-                        self.db.update_user(user_id, telegram_chat_id=str(chat_id))
+                    if "telegram_chat_id" in input_data or "chatID" in input_data:
+                        chat_id = input_data["telegram_chat_id"] if "telegram_chat_id" in input_data else input_data["chatID"]
+                        normalized_chat_id = None if chat_id in ("", None) else str(chat_id)
+                        self.db.update_user(user_id, telegram_chat_id=normalized_chat_id)
                         return self.json_response({"message": "User updated"})
                     return self.json_response({"error": "No valid updates"}, 400)
 
@@ -452,7 +455,7 @@ def main():
     logger.info(f"Starting Account Manager Service on {host}:{port}")
     logger.info("Using SQLite database")
 
-    # Register with Resource Catalog
+    # Register with Catalog
     catalog_url = os.getenv("CATALOG_URL", "http://localhost:8081")
     catalog_client = CatalogClient(catalog_url)
     catalog_client.register_service(

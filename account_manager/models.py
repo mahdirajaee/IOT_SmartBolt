@@ -12,7 +12,7 @@ class User:
         self.is_active = is_active
         self.telegram_chat_id = telegram_chat_id
 
-    def to_dict(self, include_sensitive=False):
+    def to_dict(self):
         data = {
             'id': self.id,
             'username': self.username,
@@ -53,26 +53,3 @@ class User:
             errors.append("Role must be 'admin', 'operator', or 'viewer'")
         
         return errors
-
-class Session:
-    def __init__(self, session_id=None, user_id=None, token_hash=None, 
-                 created_at=None, expires_at=None, is_valid=True):
-        self.id = session_id
-        self.user_id = user_id
-        self.token_hash = token_hash
-        self.created_at = created_at
-        self.expires_at = expires_at
-        self.is_valid = is_valid
-    
-    @classmethod
-    def from_db_row(cls, row):
-        if row is None:
-            return None
-        return cls(
-            session_id=row['id'],
-            user_id=row['user_id'],
-            token_hash=row['token_hash'],
-            created_at=row['created_at'],
-            expires_at=row['expires_at'],
-            is_valid=row['is_valid']
-        )

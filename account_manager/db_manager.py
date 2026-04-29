@@ -8,7 +8,8 @@ logger = logging.getLogger(__name__)
 
 
 class UserRow:
-  
+    # wrapper class so we can use dict-like access
+    # keeps compatibility with the rest of the code
     def __init__(self, data: dict):
         self._data = data
 
@@ -23,25 +24,24 @@ class UserRow:
 
 
 class DatabaseManager:
-   
 
     def __init__(self, db_path=None):
         default_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'users.db')
         self.db_path = db_path or os.getenv('DB_PATH', default_path)
-        #print(f"connecting to {self.db_path}")  # debug
         self._init_tables()
         logger.info(f"Connected to SQLite database at {self.db_path}")
 
     def _get_connection(self):
-        # nemidoonam in behtar hast ya connection pool?
         conn = sqlite3.connect(self.db_path)
         conn.row_factory = sqlite3.Row
         return conn
 
     def _init_tables(self):
-        # TO DO: should we add indexes?
         conn = self._get_connection()
         cursor = conn.cursor()
+
+        # Persistent in the DB header; survives recreating users.db.
+        cursor.execute('PRAGMA journal_mode = WAL')
 
         # users table
         cursor.execute('''
@@ -76,7 +76,6 @@ class DatabaseManager:
         conn.close()
 
     def create_user(self, username, email, password_hash, role='viewer', sector_id=None, telegram_chat_id=None):
-        #print(f"creating user {username}")  # debug
         conn = self._get_connection()
         cursor = conn.cursor()
 
@@ -146,7 +145,7 @@ class DatabaseManager:
 
     def update_user(self, user_id, **kwargs):
         allowed_fields = ['email', 'role', 'sector_id', 'password_hash', 'telegram_chat_id']
-        updates = {k: v for k, v in kwargs.items() if k in allowed_fields and v is not None}
+        updates = {k: v for k, v in kwargs.items() if k in allowed_fields}
 
         if not updates:
             return False
