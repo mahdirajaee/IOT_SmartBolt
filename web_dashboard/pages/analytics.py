@@ -1,8 +1,7 @@
-from dash import html, dcc, callback, Input, Output, State
+from dash import html, dcc, Input, Output, State
 import dash_bootstrap_components as dbc
 import plotly.graph_objs as go
-import plotly.express as px
-from datetime import datetime, timedelta
+from datetime import datetime
 import pandas as pd
 import os
 
@@ -259,7 +258,7 @@ def register_callbacks(app, service_client):
         health_score = health.get('health_score', 0) if health else 0
         risk_level = health.get('risk_level', 'unknown') if health else 'unknown'
 
-        anomalies = service_client.get_anomalies(pipeline_id=pipeline_id, limit=1000)
+        anomalies = service_client.get_alerts(pipeline_id=pipeline_id, limit=1000)
         anomaly_rate = len(anomalies) / max(hours, 1)
 
 
@@ -386,7 +385,7 @@ def register_callbacks(app, service_client):
             height=400
         )
 
-        anomalies = service_client.get_anomalies(pipeline_id=pipeline_id, limit=1000)
+        anomalies = service_client.get_alerts(pipeline_id=pipeline_id, limit=1000)
 
         if anomalies:
             anomaly_types = {}

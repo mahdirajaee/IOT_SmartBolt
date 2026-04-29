@@ -1,11 +1,10 @@
 import dash
-from dash import Dash, html, dcc, callback, Input, Output, State
+from dash import Dash, html, dcc, Input, Output, State
 from dash.exceptions import PreventUpdate
 import dash_bootstrap_components as dbc
 import os
 import sys
 import secrets
-from datetime import datetime
 from dotenv import load_dotenv
 import logging
 
@@ -52,7 +51,6 @@ def health_check():
 app.layout = html.Div([
     dcc.Location(id='url', refresh=False),
     dcc.Store(id='auth-store', storage_type='session'),
-    dcc.Store(id='refresh-trigger', data=0),
     html.Div(id='page-content')
 ])
 
@@ -191,8 +189,7 @@ def handle_login(n_clicks, username, password):
         if result['success']:
             auth_data = {
                 'token': result['token'],
-                'user': result['user'],
-                'login_time': datetime.now().isoformat()
+                'user': result['user']
             }
             logger.info(f"User {username} logged in successfully")
             return auth_data, "", False

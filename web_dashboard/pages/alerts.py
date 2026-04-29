@@ -1,4 +1,4 @@
-from dash import html, dcc, callback, Input, Output, State
+from dash import html, dcc, Input, Output, State
 import dash_bootstrap_components as dbc
 from datetime import datetime
 import os
@@ -285,7 +285,7 @@ def register_callbacks(app, service_client):
     )
     def update_alerts(refresh_clicks, n_intervals, severity, pipeline_id, limit):
 
-        all_alerts = service_client.get_anomalies(
+        all_alerts = service_client.get_alerts(
             pipeline_id=pipeline_id,
             limit=limit if limit else 50
         )
