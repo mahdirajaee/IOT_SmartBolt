@@ -1,7 +1,7 @@
 {
   "projectOwner": "Mahdi Rajaee, Mohammad Eftekharipour, Tanin Heidarloui Moghaddam",
   "projectName": "IoT Pipeline Monitoring System",
-  "lastUpdate": "2026-04-12 20:03",
+  "lastUpdate": "2026-04-26 21:50",
   "broker": {
     "IP": "localhost",
     "port": 1883
@@ -14,64 +14,58 @@
       "timestamp": ""
     },
     {
-      "serviceID": "timeseries_db",
-      "REST_endpoint": "http://localhost:8082",
-      "MQTT_topic": "sectors/+/pipelines/+/measurements,sectors/+/pipelines/+/alerts/+",
-      "timestamp": "2026-04-12 20:02"
-    },
-    {
       "serviceID": "analytics",
       "REST_endpoint": "http://localhost:8083",
       "MQTT_topic": "sectors/+/pipelines/+/measurements,sectors/+/pipelines/+/alerts/+",
-      "timestamp": "2026-04-12 20:02"
-    },
-    {
-      "serviceID": "account_manager",
-      "REST_endpoint": "http://localhost:8084",
-      "MQTT_topic": "",
-      "timestamp": "2026-04-12 20:01"
+      "timestamp": "2026-04-26 21:38"
     },
     {
       "serviceID": "control_center",
       "REST_endpoint": "http://localhost:8085",
       "MQTT_topic": "sectors/+/pipelines/+/commands/valves,telegram/commands/+",
-      "timestamp": "2026-04-12 20:02"
+      "timestamp": "2026-04-26 21:38"
     },
     {
       "serviceID": "raspberry_pi_north",
       "REST_endpoint": "http://localhost:8086",
       "MQTT_topic": "sectors/sector-north/pipelines/+/measurements,sectors/sector-north/pipelines/+/commands/valves",
-      "timestamp": "2026-04-12 20:03"
+      "timestamp": "2026-04-26 21:38"
     },
     {
       "serviceID": "telegram_bot",
       "REST_endpoint": "http://localhost:8087",
       "MQTT_topic": "sectors/+/pipelines/+/alerts/+,alerts/anomalies/+,telegram/commands/+",
-      "timestamp": "2026-04-12 20:03"
+      "timestamp": "2026-04-26 21:38"
     },
     {
       "serviceID": "raspberry_pi_south",
       "REST_endpoint": "http://localhost:8088",
       "MQTT_topic": "sectors/sector-south/pipelines/+/measurements,sectors/sector-south/pipelines/+/commands/valves",
-      "timestamp": "2026-04-12 20:03"
-    },
-    {
-      "serviceID": "web_dashboard",
-      "REST_endpoint": "http://127.0.0.1:8090",
-      "MQTT_topic": "",
-      "timestamp": "2026-04-12 20:03"
+      "timestamp": "2026-04-26 21:38"
     },
     {
       "serviceID": "message_broker",
       "REST_endpoint": "http://localhost:8089",
       "MQTT_topic": "sectors/+/pipelines/+/#,telegram/commands/+,alerts/anomalies/+",
-      "timestamp": "2026-04-11 19:54"
+      "timestamp": "2026-04-26 21:38"
     },
     {
       "serviceID": "test_service",
       "REST_endpoint": "http://localhost:9999",
       "MQTT_topic": "",
       "timestamp": "2026-04-09 11:40"
+    },
+    {
+      "serviceID": "account_manager",
+      "REST_endpoint": "http://localhost:8084",
+      "MQTT_topic": "",
+      "timestamp": "2026-04-26 21:38"
+    },
+    {
+      "serviceID": "timeseries_db",
+      "REST_endpoint": "http://localhost:8082",
+      "MQTT_topic": "",
+      "timestamp": "2026-04-26 21:38"
     }
   ],
   "usersList": [
@@ -273,6 +267,58 @@
                   "serviceType": "MQTT",
                   "topic": [
                     "sectors/sector-north/pipelines/N3/commands/valves"
+                  ]
+                }
+              ],
+              "lastUpdate": ""
+            }
+          ]
+        },
+        {
+          "pipelineID": "N6",
+          "location": "north sector",
+          "description": "north sector",
+          "status": "active",
+          "devicesList": [
+            {
+              "deviceID": "bolt_n6",
+              "deviceName": "Smart Bolt",
+              "measureType": [
+                "Temperature",
+                "Pressure"
+              ],
+              "availableServices": [
+                "MQTT",
+                "REST"
+              ],
+              "servicesDetails": [
+                {
+                  "serviceType": "MQTT",
+                  "topic": [
+                    "sectors/sector-north/pipelines/N6/measurements"
+                  ]
+                },
+                {
+                  "serviceType": "REST",
+                  "serviceIP": "localhost:8082"
+                }
+              ],
+              "lastUpdate": ""
+            },
+            {
+              "deviceID": "valve_n6",
+              "deviceName": "Control Valve",
+              "measureType": [
+                "ValveState"
+              ],
+              "availableServices": [
+                "MQTT"
+              ],
+              "servicesDetails": [
+                {
+                  "serviceType": "MQTT",
+                  "topic": [
+                    "sectors/sector-north/pipelines/N6/commands/valves"
                   ]
                 }
               ],
