@@ -29,7 +29,7 @@ app = Dash(__name__,
           external_stylesheets=[dbc.themes.BOOTSTRAP, dbc.icons.FONT_AWESOME],
           suppress_callback_exceptions=True,
           title="IoT Pipeline Monitor",
-          update_title=None)
+          update_title="")
 
 configured_key = os.getenv('SECRET_KEY')
 if not configured_key:

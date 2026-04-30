@@ -1,1031 +1,5 @@
 [
   {
-    "timestamp": 1776890070.0938113,
-    "pipeline_id": "N2",
-    "sector_id": "sector-north",
-    "status": "active",
-    "bolt_data": {
-      "bolt_n2": {
-        "temperature": 32.44,
-        "pressure": 95.83
-      }
-    },
-    "valve_status": {
-      "valve_n2": {
-        "valve_id": "valve_n2",
-        "state": "closed"
-      }
-    },
-    "system_status": {
-      "avg_temperature": 32.44,
-      "avg_pressure": 95.83,
-      "active_valves": 0
-    },
-    "metadata": {
-      "data_points": 580,
-      "uptime": 3534.3191356658936
-    }
-  },
-  {
-    "timestamp": 1776890076.0273044,
-    "pipeline_id": "N2",
-    "sector_id": "sector-north",
-    "status": "active",
-    "bolt_data": {
-      "bolt_n2": {
-        "temperature": 32.05,
-        "pressure": 96.19
-      }
-    },
-    "valve_status": {
-      "valve_n2": {
-        "valve_id": "valve_n2",
-        "state": "closed"
-      }
-    },
-    "system_status": {
-      "avg_temperature": 32.05,
-      "avg_pressure": 96.19,
-      "active_valves": 0
-    },
-    "metadata": {
-      "data_points": 581,
-      "uptime": 3540.252628803253
-    }
-  },
-  {
-    "timestamp": 1776890082.0063596,
-    "pipeline_id": "N2",
-    "sector_id": "sector-north",
-    "status": "active",
-    "bolt_data": {
-      "bolt_n2": {
-        "temperature": 32.04,
-        "pressure": 96.21
-      }
-    },
-    "valve_status": {
-      "valve_n2": {
-        "valve_id": "valve_n2",
-        "state": "closed"
-      }
-    },
-    "system_status": {
-      "avg_temperature": 32.04,
-      "avg_pressure": 96.21,
-      "active_valves": 0
-    },
-    "metadata": {
-      "data_points": 582,
-      "uptime": 3546.2316839694977
-    }
-  },
-  {
-    "timestamp": 1776890088.542881,
-    "pipeline_id": "N2",
-    "sector_id": "sector-north",
-    "status": "active",
-    "bolt_data": {
-      "bolt_n2": {
-        "temperature": 32.37,
-        "pressure": 96.34
-      }
-    },
-    "valve_status": {
-      "valve_n2": {
-        "valve_id": "valve_n2",
-        "state": "closed"
-      }
-    },
-    "system_status": {
-      "avg_temperature": 32.37,
-      "avg_pressure": 96.34,
-      "active_valves": 0
-    },
-    "metadata": {
-      "data_points": 583,
-      "uptime": 3552.7682054042816
-    }
-  },
-  {
-    "timestamp": 1776890094.7975438,
-    "pipeline_id": "N2",
-    "sector_id": "sector-north",
-    "status": "active",
-    "bolt_data": {
-      "bolt_n2": {
-        "temperature": 32.07,
-        "pressure": 98.68
-      }
-    },
-    "valve_status": {
-      "valve_n2": {
-        "valve_id": "valve_n2",
-        "state": "closed"
-      }
-    },
-    "system_status": {
-      "avg_temperature": 32.07,
-      "avg_pressure": 98.68,
-      "active_valves": 0
-    },
-    "metadata": {
-      "data_points": 584,
-      "uptime": 3559.022868156433
-    }
-  },
-  {
-    "timestamp": 1776890100.7010002,
-    "pipeline_id": "N2",
-    "sector_id": "sector-north",
-    "status": "active",
-    "bolt_data": {
-      "bolt_n2": {
-        "temperature": 32.21,
-        "pressure": 107.67
-      }
-    },
-    "valve_status": {
-      "valve_n2": {
-        "valve_id": "valve_n2",
-        "state": "closed"
-      }
-    },
-    "system_status": {
-      "avg_temperature": 32.21,
-      "avg_pressure": 107.67,
-      "active_valves": 0
-    },
-    "metadata": {
-      "data_points": 585,
-      "uptime": 3564.9263246059418
-    }
-  },
-  {
-    "timestamp": 1776890106.564319,
-    "pipeline_id": "N2",
-    "sector_id": "sector-north",
-    "status": "active",
-    "bolt_data": {
-      "bolt_n2": {
-        "temperature": 31.98,
-        "pressure": 112.25
-      }
-    },
-    "valve_status": {
-      "valve_n2": {
-        "valve_id": "valve_n2",
-        "state": "closed"
-      }
-    },
-    "system_status": {
-      "avg_temperature": 31.98,
-      "avg_pressure": 112.25,
-      "active_valves": 0
-    },
-    "metadata": {
-      "data_points": 586,
-      "uptime": 3570.7896432876587
-    }
-  },
-  {
-    "timestamp": 1776890112.526934,
-    "pipeline_id": "N2",
-    "sector_id": "sector-north",
-    "status": "active",
-    "bolt_data": {
-      "bolt_n2": {
-        "temperature": 31.84,
-        "pressure": 106.78
-      }
-    },
-    "valve_status": {
-      "valve_n2": {
-        "valve_id": "valve_n2",
-        "state": "closed"
-      }
-    },
-    "system_status": {
-      "avg_temperature": 31.84,
-      "avg_pressure": 106.78,
-      "active_valves": 0
-    },
-    "metadata": {
-      "data_points": 587,
-      "uptime": 3576.7522583007812
-    }
-  },
-  {
-    "timestamp": 1776890118.4591987,
-    "pipeline_id": "N2",
-    "sector_id": "sector-north",
-    "status": "active",
-    "bolt_data": {
-      "bolt_n2": {
-        "temperature": 31.55,
-        "pressure": 101.59
-      }
-    },
-    "valve_status": {
-      "valve_n2": {
-        "valve_id": "valve_n2",
-        "state": "closed"
-      }
-    },
-    "system_status": {
-      "avg_temperature": 31.55,
-      "avg_pressure": 101.59,
-      "active_valves": 0
-    },
-    "metadata": {
-      "data_points": 588,
-      "uptime": 3582.6845231056213
-    }
-  },
-  {
-    "timestamp": 1776890124.395882,
-    "pipeline_id": "N2",
-    "sector_id": "sector-north",
-    "status": "active",
-    "bolt_data": {
-      "bolt_n2": {
-        "temperature": 54.51,
-        "pressure": 127.74
-      }
-    },
-    "valve_status": {
-      "valve_n2": {
-        "valve_id": "valve_n2",
-        "state": "closed"
-      }
-    },
-    "system_status": {
-      "avg_temperature": 54.51,
-      "avg_pressure": 127.74,
-      "active_valves": 0
-    },
-    "metadata": {
-      "data_points": 589,
-      "uptime": 3588.6212062835693
-    }
-  },
-  {
-    "timestamp": 1776890130.3389153,
-    "pipeline_id": "N2",
-    "sector_id": "sector-north",
-    "status": "active",
-    "bolt_data": {
-      "bolt_n2": {
-        "temperature": 32.08,
-        "pressure": 96.97
-      }
-    },
-    "valve_status": {
-      "valve_n2": {
-        "valve_id": "valve_n2",
-        "state": "closed"
-      }
-    },
-    "system_status": {
-      "avg_temperature": 32.08,
-      "avg_pressure": 96.97,
-      "active_valves": 0
-    },
-    "metadata": {
-      "data_points": 590,
-      "uptime": 3594.5642397403717
-    }
-  },
-  {
-    "timestamp": 1776890136.4176786,
-    "pipeline_id": "N2",
-    "sector_id": "sector-north",
-    "status": "active",
-    "bolt_data": {
-      "bolt_n2": {
-        "temperature": 32.07,
-        "pressure": 96.51
-      }
-    },
-    "valve_status": {
-      "valve_n2": {
-        "valve_id": "valve_n2",
-        "state": "closed"
-      }
-    },
-    "system_status": {
-      "avg_temperature": 32.07,
-      "avg_pressure": 96.51,
-      "active_valves": 0
-    },
-    "metadata": {
-      "data_points": 591,
-      "uptime": 3600.643002986908
-    }
-  },
-  {
-    "timestamp": 1776890142.491286,
-    "pipeline_id": "N2",
-    "sector_id": "sector-north",
-    "status": "active",
-    "bolt_data": {
-      "bolt_n2": {
-        "temperature": 32.31,
-        "pressure": 96.27
-      }
-    },
-    "valve_status": {
-      "valve_n2": {
-        "valve_id": "valve_n2",
-        "state": "closed"
-      }
-    },
-    "system_status": {
-      "avg_temperature": 32.31,
-      "avg_pressure": 96.27,
-      "active_valves": 0
-    },
-    "metadata": {
-      "data_points": 592,
-      "uptime": 3606.716610431671
-    }
-  },
-  {
-    "timestamp": 1776890150.0926008,
-    "pipeline_id": "N2",
-    "sector_id": "sector-north",
-    "status": "active",
-    "bolt_data": {
-      "bolt_n2": {
-        "temperature": 32.0,
-        "pressure": 96.6
-      }
-    },
-    "valve_status": {
-      "valve_n2": {
-        "valve_id": "valve_n2",
-        "state": "closed"
-      }
-    },
-    "system_status": {
-      "avg_temperature": 32.0,
-      "avg_pressure": 96.6,
-      "active_valves": 0
-    },
-    "metadata": {
-      "data_points": 593,
-      "uptime": 3614.3179252147675
-    }
-  },
-  {
-    "timestamp": 1776890157.8783882,
-    "pipeline_id": "N2",
-    "sector_id": "sector-north",
-    "status": "active",
-    "bolt_data": {
-      "bolt_n2": {
-        "temperature": 31.91,
-        "pressure": 96.25
-      }
-    },
-    "valve_status": {
-      "valve_n2": {
-        "valve_id": "valve_n2",
-        "state": "closed"
-      }
-    },
-    "system_status": {
-      "avg_temperature": 31.91,
-      "avg_pressure": 96.25,
-      "active_valves": 0
-    },
-    "metadata": {
-      "data_points": 594,
-      "uptime": 3622.1037125587463
-    }
-  },
-  {
-    "timestamp": 1776890164.9485,
-    "pipeline_id": "N2",
-    "sector_id": "sector-north",
-    "status": "active",
-    "bolt_data": {
-      "bolt_n2": {
-        "temperature": 31.69,
-        "pressure": 96.13
-      }
-    },
-    "valve_status": {
-      "valve_n2": {
-        "valve_id": "valve_n2",
-        "state": "closed"
-      }
-    },
-    "system_status": {
-      "avg_temperature": 31.69,
-      "avg_pressure": 96.13,
-      "active_valves": 0
-    },
-    "metadata": {
-      "data_points": 595,
-      "uptime": 3629.1738243103027
-    }
-  },
-  {
-    "timestamp": 1776890172.6409433,
-    "pipeline_id": "N2",
-    "sector_id": "sector-north",
-    "status": "active",
-    "bolt_data": {
-      "bolt_n2": {
-        "temperature": 31.64,
-        "pressure": 96.31
-      }
-    },
-    "valve_status": {
-      "valve_n2": {
-        "valve_id": "valve_n2",
-        "state": "closed"
-      }
-    },
-    "system_status": {
-      "avg_temperature": 31.64,
-      "avg_pressure": 96.31,
-      "active_valves": 0
-    },
-    "metadata": {
-      "data_points": 596,
-      "uptime": 3636.866267681122
-    }
-  },
-  {
-    "timestamp": 1776890179.2905145,
-    "pipeline_id": "N2",
-    "sector_id": "sector-north",
-    "status": "active",
-    "bolt_data": {
-      "bolt_n2": {
-        "temperature": 31.83,
-        "pressure": 95.91
-      }
-    },
-    "valve_status": {
-      "valve_n2": {
-        "valve_id": "valve_n2",
-        "state": "closed"
-      }
-    },
-    "system_status": {
-      "avg_temperature": 31.83,
-      "avg_pressure": 95.91,
-      "active_valves": 0
-    },
-    "metadata": {
-      "data_points": 597,
-      "uptime": 3643.5158388614655
-    }
-  },
-  {
-    "timestamp": 1776890185.61345,
-    "pipeline_id": "N2",
-    "sector_id": "sector-north",
-    "status": "active",
-    "bolt_data": {
-      "bolt_n2": {
-        "temperature": 35.07,
-        "pressure": 99.16
-      }
-    },
-    "valve_status": {
-      "valve_n2": {
-        "valve_id": "valve_n2",
-        "state": "closed"
-      }
-    },
-    "system_status": {
-      "avg_temperature": 35.07,
-      "avg_pressure": 99.16,
-      "active_valves": 0
-    },
-    "metadata": {
-      "data_points": 598,
-      "uptime": 3649.8387744426727
-    }
-  },
-  {
-    "timestamp": 1776890191.9324284,
-    "pipeline_id": "N2",
-    "sector_id": "sector-north",
-    "status": "active",
-    "bolt_data": {
-      "bolt_n2": {
-        "temperature": 46.88,
-        "pressure": 109.1
-      }
-    },
-    "valve_status": {
-      "valve_n2": {
-        "valve_id": "valve_n2",
-        "state": "closed"
-      }
-    },
-    "system_status": {
-      "avg_temperature": 46.88,
-      "avg_pressure": 109.1,
-      "active_valves": 0
-    },
-    "metadata": {
-      "data_points": 599,
-      "uptime": 3656.157752752304
-    }
-  },
-  {
-    "timestamp": 1776890197.8252227,
-    "pipeline_id": "N2",
-    "sector_id": "sector-north",
-    "status": "active",
-    "bolt_data": {
-      "bolt_n2": {
-        "temperature": 50.0,
-        "pressure": 112.28
-      }
-    },
-    "valve_status": {
-      "valve_n2": {
-        "valve_id": "valve_n2",
-        "state": "closed"
-      }
-    },
-    "system_status": {
-      "avg_temperature": 50.0,
-      "avg_pressure": 112.28,
-      "active_valves": 0
-    },
-    "metadata": {
-      "data_points": 600,
-      "uptime": 3662.0505471229553
-    }
-  },
-  {
-    "timestamp": 1776890203.8470643,
-    "pipeline_id": "N2",
-    "sector_id": "sector-north",
-    "status": "active",
-    "bolt_data": {
-      "bolt_n2": {
-        "temperature": 44.03,
-        "pressure": 106.23
-      }
-    },
-    "valve_status": {
-      "valve_n2": {
-        "valve_id": "valve_n2",
-        "state": "closed"
-      }
-    },
-    "system_status": {
-      "avg_temperature": 44.03,
-      "avg_pressure": 106.23,
-      "active_valves": 0
-    },
-    "metadata": {
-      "data_points": 601,
-      "uptime": 3668.072388648987
-    }
-  },
-  {
-    "timestamp": 1776890209.8937366,
-    "pipeline_id": "N2",
-    "sector_id": "sector-north",
-    "status": "active",
-    "bolt_data": {
-      "bolt_n2": {
-        "temperature": 38.17,
-        "pressure": 101.05
-      }
-    },
-    "valve_status": {
-      "valve_n2": {
-        "valve_id": "valve_n2",
-        "state": "closed"
-      }
-    },
-    "system_status": {
-      "avg_temperature": 38.17,
-      "avg_pressure": 101.05,
-      "active_valves": 0
-    },
-    "metadata": {
-      "data_points": 602,
-      "uptime": 3674.1190609931946
-    }
-  },
-  {
-    "timestamp": 1776890215.779422,
-    "pipeline_id": "N2",
-    "sector_id": "sector-north",
-    "status": "active",
-    "bolt_data": {
-      "bolt_n2": {
-        "temperature": 35.06,
-        "pressure": 98.45
-      }
-    },
-    "valve_status": {
-      "valve_n2": {
-        "valve_id": "valve_n2",
-        "state": "closed"
-      }
-    },
-    "system_status": {
-      "avg_temperature": 35.06,
-      "avg_pressure": 98.45,
-      "active_valves": 0
-    },
-    "metadata": {
-      "data_points": 603,
-      "uptime": 3680.0047464370728
-    }
-  },
-  {
-    "timestamp": 1776890221.6642566,
-    "pipeline_id": "N2",
-    "sector_id": "sector-north",
-    "status": "active",
-    "bolt_data": {
-      "bolt_n2": {
-        "temperature": 33.49,
-        "pressure": 97.16
-      }
-    },
-    "valve_status": {
-      "valve_n2": {
-        "valve_id": "valve_n2",
-        "state": "closed"
-      }
-    },
-    "system_status": {
-      "avg_temperature": 33.49,
-      "avg_pressure": 97.16,
-      "active_valves": 0
-    },
-    "metadata": {
-      "data_points": 604,
-      "uptime": 3685.889580965042
-    }
-  },
-  {
-    "timestamp": 1776890227.8411303,
-    "pipeline_id": "N2",
-    "sector_id": "sector-north",
-    "status": "active",
-    "bolt_data": {
-      "bolt_n2": {
-        "temperature": 32.94,
-        "pressure": 96.73
-      }
-    },
-    "valve_status": {
-      "valve_n2": {
-        "valve_id": "valve_n2",
-        "state": "closed"
-      }
-    },
-    "system_status": {
-      "avg_temperature": 32.94,
-      "avg_pressure": 96.73,
-      "active_valves": 0
-    },
-    "metadata": {
-      "data_points": 605,
-      "uptime": 3692.0664546489716
-    }
-  },
-  {
-    "timestamp": 1776890233.7340426,
-    "pipeline_id": "N2",
-    "sector_id": "sector-north",
-    "status": "active",
-    "bolt_data": {
-      "bolt_n2": {
-        "temperature": 32.9,
-        "pressure": 96.58
-      }
-    },
-    "valve_status": {
-      "valve_n2": {
-        "valve_id": "valve_n2",
-        "state": "closed"
-      }
-    },
-    "system_status": {
-      "avg_temperature": 32.9,
-      "avg_pressure": 96.58,
-      "active_valves": 0
-    },
-    "metadata": {
-      "data_points": 606,
-      "uptime": 3697.9593670368195
-    }
-  },
-  {
-    "timestamp": 1776890239.6957512,
-    "pipeline_id": "N2",
-    "sector_id": "sector-north",
-    "status": "active",
-    "bolt_data": {
-      "bolt_n2": {
-        "temperature": 32.46,
-        "pressure": 96.38
-      }
-    },
-    "valve_status": {
-      "valve_n2": {
-        "valve_id": "valve_n2",
-        "state": "closed"
-      }
-    },
-    "system_status": {
-      "avg_temperature": 32.46,
-      "avg_pressure": 96.38,
-      "active_valves": 0
-    },
-    "metadata": {
-      "data_points": 607,
-      "uptime": 3703.9210755825043
-    }
-  },
-  {
-    "timestamp": 1776890245.9322386,
-    "pipeline_id": "N2",
-    "sector_id": "sector-north",
-    "status": "active",
-    "bolt_data": {
-      "bolt_n2": {
-        "temperature": 31.98,
-        "pressure": 96.19
-      }
-    },
-    "valve_status": {
-      "valve_n2": {
-        "valve_id": "valve_n2",
-        "state": "closed"
-      }
-    },
-    "system_status": {
-      "avg_temperature": 31.98,
-      "avg_pressure": 96.19,
-      "active_valves": 0
-    },
-    "metadata": {
-      "data_points": 608,
-      "uptime": 3710.157562971115
-    }
-  },
-  {
-    "timestamp": 1776890252.1136355,
-    "pipeline_id": "N2",
-    "sector_id": "sector-north",
-    "status": "active",
-    "bolt_data": {
-      "bolt_n2": {
-        "temperature": 32.08,
-        "pressure": 95.93
-      }
-    },
-    "valve_status": {
-      "valve_n2": {
-        "valve_id": "valve_n2",
-        "state": "closed"
-      }
-    },
-    "system_status": {
-      "avg_temperature": 32.08,
-      "avg_pressure": 95.93,
-      "active_valves": 0
-    },
-    "metadata": {
-      "data_points": 609,
-      "uptime": 3716.3389599323273
-    }
-  },
-  {
-    "timestamp": 1776890258.701749,
-    "pipeline_id": "N2",
-    "sector_id": "sector-north",
-    "status": "active",
-    "bolt_data": {
-      "bolt_n2": {
-        "temperature": 35.61,
-        "pressure": 96.18
-      }
-    },
-    "valve_status": {
-      "valve_n2": {
-        "valve_id": "valve_n2",
-        "state": "closed"
-      }
-    },
-    "system_status": {
-      "avg_temperature": 35.61,
-      "avg_pressure": 96.18,
-      "active_valves": 0
-    },
-    "metadata": {
-      "data_points": 610,
-      "uptime": 3722.9270734786987
-    }
-  },
-  {
-    "timestamp": 1776890265.5181847,
-    "pipeline_id": "N2",
-    "sector_id": "sector-north",
-    "status": "active",
-    "bolt_data": {
-      "bolt_n2": {
-        "temperature": 47.92,
-        "pressure": 96.23
-      }
-    },
-    "valve_status": {
-      "valve_n2": {
-        "valve_id": "valve_n2",
-        "state": "closed"
-      }
-    },
-    "system_status": {
-      "avg_temperature": 47.92,
-      "avg_pressure": 96.23,
-      "active_valves": 0
-    },
-    "metadata": {
-      "data_points": 611,
-      "uptime": 3729.743509054184
-    }
-  },
-  {
-    "timestamp": 1776890271.4335754,
-    "pipeline_id": "N2",
-    "sector_id": "sector-north",
-    "status": "active",
-    "bolt_data": {
-      "bolt_n2": {
-        "temperature": 50.0,
-        "pressure": 96.21
-      }
-    },
-    "valve_status": {
-      "valve_n2": {
-        "valve_id": "valve_n2",
-        "state": "closed"
-      }
-    },
-    "system_status": {
-      "avg_temperature": 50.0,
-      "avg_pressure": 96.21,
-      "active_valves": 0
-    },
-    "metadata": {
-      "data_points": 612,
-      "uptime": 3735.658899784088
-    }
-  },
-  {
-    "timestamp": 1776890277.477809,
-    "pipeline_id": "N2",
-    "sector_id": "sector-north",
-    "status": "active",
-    "bolt_data": {
-      "bolt_n2": {
-        "temperature": 42.83,
-        "pressure": 95.86
-      }
-    },
-    "valve_status": {
-      "valve_n2": {
-        "valve_id": "valve_n2",
-        "state": "closed"
-      }
-    },
-    "system_status": {
-      "avg_temperature": 42.83,
-      "avg_pressure": 95.86,
-      "active_valves": 0
-    },
-    "metadata": {
-      "data_points": 613,
-      "uptime": 3741.7031333446503
-    }
-  },
-  {
-    "timestamp": 1776890283.3786614,
-    "pipeline_id": "N2",
-    "sector_id": "sector-north",
-    "status": "active",
-    "bolt_data": {
-      "bolt_n2": {
-        "temperature": 37.61,
-        "pressure": 95.91
-      }
-    },
-    "valve_status": {
-      "valve_n2": {
-        "valve_id": "valve_n2",
-        "state": "closed"
-      }
-    },
-    "system_status": {
-      "avg_temperature": 37.61,
-      "avg_pressure": 95.91,
-      "active_valves": 0
-    },
-    "metadata": {
-      "data_points": 614,
-      "uptime": 3747.603985786438
-    }
-  },
-  {
-    "timestamp": 1776890289.0526824,
-    "pipeline_id": "N2",
-    "sector_id": "sector-north",
-    "status": "active",
-    "bolt_data": {
-      "bolt_n2": {
-        "temperature": 34.73,
-        "pressure": 95.99
-      }
-    },
-    "valve_status": {
-      "valve_n2": {
-        "valve_id": "valve_n2",
-        "state": "closed"
-      }
-    },
-    "system_status": {
-      "avg_temperature": 34.73,
-      "avg_pressure": 95.99,
-      "active_valves": 0
-    },
-    "metadata": {
-      "data_points": 615,
-      "uptime": 3753.2780067920685
-    }
-  },
-  {
-    "timestamp": 1776890294.8759806,
-    "pipeline_id": "N2",
-    "sector_id": "sector-north",
-    "status": "active",
-    "bolt_data": {
-      "bolt_n2": {
-        "temperature": 33.51,
-        "pressure": 96.25
-      }
-    },
-    "valve_status": {
-      "valve_n2": {
-        "valve_id": "valve_n2",
-        "state": "closed"
-      }
-    },
-    "system_status": {
-      "avg_temperature": 33.51,
-      "avg_pressure": 96.25,
-      "active_valves": 0
-    },
-    "metadata": {
-      "data_points": 616,
-      "uptime": 3759.1013050079346
-    }
-  },
-  {
-    "timestamp": 1776890300.8089795,
-    "pipeline_id": "N2",
-    "sector_id": "sector-north",
-    "status": "active",
-    "bolt_data": {
-      "bolt_n2": {
-        "temperature": 32.84,
-        "pressure": 96.51
-      }
-    },
-    "valve_status": {
-      "valve_n2": {
-        "valve_id": "valve_n2",
-        "state": "closed"
-      }
-    },
-    "system_status": {
-      "avg_temperature": 32.84,
-      "avg_pressure": 96.51,
-      "active_valves": 0
-    },
-    "metadata": {
-      "data_points": 617,
-      "uptime": 3765.0343039035797
-    }
-  },
-  {
     "timestamp": 1776890306.5882583,
     "pipeline_id": "N2",
     "sector_id": "sector-north",
@@ -26997,6 +25971,1032 @@
     "metadata": {
       "data_points": 46,
       "uptime": 304.9698896408081
+    }
+  },
+  {
+    "timestamp": 1777539409.149744,
+    "pipeline_id": "N2",
+    "sector_id": "sector-north",
+    "status": "active",
+    "bolt_data": {
+      "bolt_n2": {
+        "temperature": 32.68,
+        "pressure": 95.54
+      }
+    },
+    "valve_status": {
+      "valve_n2": {
+        "valve_id": "valve_n2",
+        "state": "closed"
+      }
+    },
+    "system_status": {
+      "avg_temperature": 32.68,
+      "avg_pressure": 95.54,
+      "active_valves": 0
+    },
+    "metadata": {
+      "data_points": 1,
+      "uptime": 1.0265710353851318
+    }
+  },
+  {
+    "timestamp": 1777539414.267096,
+    "pipeline_id": "N2",
+    "sector_id": "sector-north",
+    "status": "active",
+    "bolt_data": {
+      "bolt_n2": {
+        "temperature": 32.2,
+        "pressure": 95.8
+      }
+    },
+    "valve_status": {
+      "valve_n2": {
+        "valve_id": "valve_n2",
+        "state": "closed"
+      }
+    },
+    "system_status": {
+      "avg_temperature": 32.2,
+      "avg_pressure": 95.8,
+      "active_valves": 0
+    },
+    "metadata": {
+      "data_points": 2,
+      "uptime": 6.143923997879028
+    }
+  },
+  {
+    "timestamp": 1777539419.3664892,
+    "pipeline_id": "N2",
+    "sector_id": "sector-north",
+    "status": "active",
+    "bolt_data": {
+      "bolt_n2": {
+        "temperature": 32.25,
+        "pressure": 96.55
+      }
+    },
+    "valve_status": {
+      "valve_n2": {
+        "valve_id": "valve_n2",
+        "state": "closed"
+      }
+    },
+    "system_status": {
+      "avg_temperature": 32.25,
+      "avg_pressure": 96.55,
+      "active_valves": 0
+    },
+    "metadata": {
+      "data_points": 3,
+      "uptime": 11.243319988250732
+    }
+  },
+  {
+    "timestamp": 1777539424.468469,
+    "pipeline_id": "N2",
+    "sector_id": "sector-north",
+    "status": "active",
+    "bolt_data": {
+      "bolt_n2": {
+        "temperature": 31.78,
+        "pressure": 95.9
+      }
+    },
+    "valve_status": {
+      "valve_n2": {
+        "valve_id": "valve_n2",
+        "state": "closed"
+      }
+    },
+    "system_status": {
+      "avg_temperature": 31.78,
+      "avg_pressure": 95.9,
+      "active_valves": 0
+    },
+    "metadata": {
+      "data_points": 4,
+      "uptime": 16.345300912857056
+    }
+  },
+  {
+    "timestamp": 1777539429.5667388,
+    "pipeline_id": "N2",
+    "sector_id": "sector-north",
+    "status": "active",
+    "bolt_data": {
+      "bolt_n2": {
+        "temperature": 32.12,
+        "pressure": 95.98
+      }
+    },
+    "valve_status": {
+      "valve_n2": {
+        "valve_id": "valve_n2",
+        "state": "closed"
+      }
+    },
+    "system_status": {
+      "avg_temperature": 32.12,
+      "avg_pressure": 95.98,
+      "active_valves": 0
+    },
+    "metadata": {
+      "data_points": 5,
+      "uptime": 21.443570137023926
+    }
+  },
+  {
+    "timestamp": 1777539434.6888971,
+    "pipeline_id": "N2",
+    "sector_id": "sector-north",
+    "status": "active",
+    "bolt_data": {
+      "bolt_n2": {
+        "temperature": 31.92,
+        "pressure": 96.35
+      }
+    },
+    "valve_status": {
+      "valve_n2": {
+        "valve_id": "valve_n2",
+        "state": "closed"
+      }
+    },
+    "system_status": {
+      "avg_temperature": 31.92,
+      "avg_pressure": 96.35,
+      "active_valves": 0
+    },
+    "metadata": {
+      "data_points": 6,
+      "uptime": 26.56572699546814
+    }
+  },
+  {
+    "timestamp": 1777539439.787198,
+    "pipeline_id": "N2",
+    "sector_id": "sector-north",
+    "status": "active",
+    "bolt_data": {
+      "bolt_n2": {
+        "temperature": 32.01,
+        "pressure": 96.1
+      }
+    },
+    "valve_status": {
+      "valve_n2": {
+        "valve_id": "valve_n2",
+        "state": "closed"
+      }
+    },
+    "system_status": {
+      "avg_temperature": 32.01,
+      "avg_pressure": 96.1,
+      "active_valves": 0
+    },
+    "metadata": {
+      "data_points": 7,
+      "uptime": 31.66403102874756
+    }
+  },
+  {
+    "timestamp": 1777539444.87713,
+    "pipeline_id": "N2",
+    "sector_id": "sector-north",
+    "status": "active",
+    "bolt_data": {
+      "bolt_n2": {
+        "temperature": 32.31,
+        "pressure": 96.15
+      }
+    },
+    "valve_status": {
+      "valve_n2": {
+        "valve_id": "valve_n2",
+        "state": "closed"
+      }
+    },
+    "system_status": {
+      "avg_temperature": 32.31,
+      "avg_pressure": 96.15,
+      "active_valves": 0
+    },
+    "metadata": {
+      "data_points": 8,
+      "uptime": 36.75395703315735
+    }
+  },
+  {
+    "timestamp": 1777539449.968817,
+    "pipeline_id": "N2",
+    "sector_id": "sector-north",
+    "status": "active",
+    "bolt_data": {
+      "bolt_n2": {
+        "temperature": 34.45,
+        "pressure": 96.51
+      }
+    },
+    "valve_status": {
+      "valve_n2": {
+        "valve_id": "valve_n2",
+        "state": "closed"
+      }
+    },
+    "system_status": {
+      "avg_temperature": 34.45,
+      "avg_pressure": 96.51,
+      "active_valves": 0
+    },
+    "metadata": {
+      "data_points": 9,
+      "uptime": 41.84564709663391
+    }
+  },
+  {
+    "timestamp": 1777539455.082412,
+    "pipeline_id": "N2",
+    "sector_id": "sector-north",
+    "status": "active",
+    "bolt_data": {
+      "bolt_n2": {
+        "temperature": 57.24,
+        "pressure": 130.31
+      }
+    },
+    "valve_status": {
+      "valve_n2": {
+        "valve_id": "valve_n2",
+        "state": "closed"
+      }
+    },
+    "system_status": {
+      "avg_temperature": 57.24,
+      "avg_pressure": 130.31,
+      "active_valves": 0
+    },
+    "metadata": {
+      "data_points": 10,
+      "uptime": 46.959243059158325
+    }
+  },
+  {
+    "timestamp": 1777539460.204706,
+    "pipeline_id": "N2",
+    "sector_id": "sector-north",
+    "status": "active",
+    "bolt_data": {
+      "bolt_n2": {
+        "temperature": 50.0,
+        "pressure": 96.22
+      }
+    },
+    "valve_status": {
+      "valve_n2": {
+        "valve_id": "valve_n2",
+        "state": "closed"
+      }
+    },
+    "system_status": {
+      "avg_temperature": 50.0,
+      "avg_pressure": 96.22,
+      "active_valves": 0
+    },
+    "metadata": {
+      "data_points": 11,
+      "uptime": 52.08153796195984
+    }
+  },
+  {
+    "timestamp": 1777539465.310029,
+    "pipeline_id": "N2",
+    "sector_id": "sector-north",
+    "status": "active",
+    "bolt_data": {
+      "bolt_n2": {
+        "temperature": 50.0,
+        "pressure": 96.02
+      }
+    },
+    "valve_status": {
+      "valve_n2": {
+        "valve_id": "valve_n2",
+        "state": "closed"
+      }
+    },
+    "system_status": {
+      "avg_temperature": 50.0,
+      "avg_pressure": 96.02,
+      "active_valves": 0
+    },
+    "metadata": {
+      "data_points": 12,
+      "uptime": 57.186859130859375
+    }
+  },
+  {
+    "timestamp": 1777539470.438535,
+    "pipeline_id": "N2",
+    "sector_id": "sector-north",
+    "status": "active",
+    "bolt_data": {
+      "bolt_n2": {
+        "temperature": 42.54,
+        "pressure": 95.91
+      }
+    },
+    "valve_status": {
+      "valve_n2": {
+        "valve_id": "valve_n2",
+        "state": "closed"
+      }
+    },
+    "system_status": {
+      "avg_temperature": 42.54,
+      "avg_pressure": 95.91,
+      "active_valves": 0
+    },
+    "metadata": {
+      "data_points": 13,
+      "uptime": 62.315367221832275
+    }
+  },
+  {
+    "timestamp": 1777539475.552737,
+    "pipeline_id": "N2",
+    "sector_id": "sector-north",
+    "status": "active",
+    "bolt_data": {
+      "bolt_n2": {
+        "temperature": 37.39,
+        "pressure": 95.96
+      }
+    },
+    "valve_status": {
+      "valve_n2": {
+        "valve_id": "valve_n2",
+        "state": "closed"
+      }
+    },
+    "system_status": {
+      "avg_temperature": 37.39,
+      "avg_pressure": 95.96,
+      "active_valves": 0
+    },
+    "metadata": {
+      "data_points": 14,
+      "uptime": 67.42956614494324
+    }
+  },
+  {
+    "timestamp": 1777539480.670669,
+    "pipeline_id": "N2",
+    "sector_id": "sector-north",
+    "status": "active",
+    "bolt_data": {
+      "bolt_n2": {
+        "temperature": 34.31,
+        "pressure": 96.25
+      }
+    },
+    "valve_status": {
+      "valve_n2": {
+        "valve_id": "valve_n2",
+        "state": "closed"
+      }
+    },
+    "system_status": {
+      "avg_temperature": 34.31,
+      "avg_pressure": 96.25,
+      "active_valves": 0
+    },
+    "metadata": {
+      "data_points": 15,
+      "uptime": 72.54749798774719
+    }
+  },
+  {
+    "timestamp": 1777539485.7761621,
+    "pipeline_id": "N2",
+    "sector_id": "sector-north",
+    "status": "active",
+    "bolt_data": {
+      "bolt_n2": {
+        "temperature": 33.1,
+        "pressure": 96.34
+      }
+    },
+    "valve_status": {
+      "valve_n2": {
+        "valve_id": "valve_n2",
+        "state": "closed"
+      }
+    },
+    "system_status": {
+      "avg_temperature": 33.1,
+      "avg_pressure": 96.34,
+      "active_valves": 0
+    },
+    "metadata": {
+      "data_points": 16,
+      "uptime": 77.65299010276794
+    }
+  },
+  {
+    "timestamp": 1777539490.887563,
+    "pipeline_id": "N2",
+    "sector_id": "sector-north",
+    "status": "active",
+    "bolt_data": {
+      "bolt_n2": {
+        "temperature": 32.75,
+        "pressure": 96.31
+      }
+    },
+    "valve_status": {
+      "valve_n2": {
+        "valve_id": "valve_n2",
+        "state": "closed"
+      }
+    },
+    "system_status": {
+      "avg_temperature": 32.75,
+      "avg_pressure": 96.31,
+      "active_valves": 0
+    },
+    "metadata": {
+      "data_points": 17,
+      "uptime": 82.76439714431763
+    }
+  },
+  {
+    "timestamp": 1777539495.9883451,
+    "pipeline_id": "N2",
+    "sector_id": "sector-north",
+    "status": "active",
+    "bolt_data": {
+      "bolt_n2": {
+        "temperature": 32.14,
+        "pressure": 96.47
+      }
+    },
+    "valve_status": {
+      "valve_n2": {
+        "valve_id": "valve_n2",
+        "state": "closed"
+      }
+    },
+    "system_status": {
+      "avg_temperature": 32.14,
+      "avg_pressure": 96.47,
+      "active_valves": 0
+    },
+    "metadata": {
+      "data_points": 18,
+      "uptime": 87.86517810821533
+    }
+  },
+  {
+    "timestamp": 1777539501.095168,
+    "pipeline_id": "N2",
+    "sector_id": "sector-north",
+    "status": "active",
+    "bolt_data": {
+      "bolt_n2": {
+        "temperature": 58.22,
+        "pressure": 129.37
+      }
+    },
+    "valve_status": {
+      "valve_n2": {
+        "valve_id": "valve_n2",
+        "state": "closed"
+      }
+    },
+    "system_status": {
+      "avg_temperature": 58.22,
+      "avg_pressure": 129.37,
+      "active_valves": 0
+    },
+    "metadata": {
+      "data_points": 19,
+      "uptime": 92.97200202941895
+    }
+  },
+  {
+    "timestamp": 1777539506.210861,
+    "pipeline_id": "N2",
+    "sector_id": "sector-north",
+    "status": "active",
+    "bolt_data": {
+      "bolt_n2": {
+        "temperature": 32.17,
+        "pressure": 96.31
+      }
+    },
+    "valve_status": {
+      "valve_n2": {
+        "valve_id": "valve_n2",
+        "state": "closed"
+      }
+    },
+    "system_status": {
+      "avg_temperature": 32.17,
+      "avg_pressure": 96.31,
+      "active_valves": 0
+    },
+    "metadata": {
+      "data_points": 20,
+      "uptime": 98.08769607543945
+    }
+  },
+  {
+    "timestamp": 1777539511.325854,
+    "pipeline_id": "N2",
+    "sector_id": "sector-north",
+    "status": "active",
+    "bolt_data": {
+      "bolt_n2": {
+        "temperature": 32.59,
+        "pressure": 96.48
+      }
+    },
+    "valve_status": {
+      "valve_n2": {
+        "valve_id": "valve_n2",
+        "state": "closed"
+      }
+    },
+    "system_status": {
+      "avg_temperature": 32.59,
+      "avg_pressure": 96.48,
+      "active_valves": 0
+    },
+    "metadata": {
+      "data_points": 21,
+      "uptime": 103.20268702507019
+    }
+  },
+  {
+    "timestamp": 1777539516.427497,
+    "pipeline_id": "N2",
+    "sector_id": "sector-north",
+    "status": "active",
+    "bolt_data": {
+      "bolt_n2": {
+        "temperature": 34.43,
+        "pressure": 96.32
+      }
+    },
+    "valve_status": {
+      "valve_n2": {
+        "valve_id": "valve_n2",
+        "state": "closed"
+      }
+    },
+    "system_status": {
+      "avg_temperature": 34.43,
+      "avg_pressure": 96.32,
+      "active_valves": 0
+    },
+    "metadata": {
+      "data_points": 22,
+      "uptime": 108.3043282032013
+    }
+  },
+  {
+    "timestamp": 1777539521.572476,
+    "pipeline_id": "N2",
+    "sector_id": "sector-north",
+    "status": "active",
+    "bolt_data": {
+      "bolt_n2": {
+        "temperature": 42.96,
+        "pressure": 96.44
+      }
+    },
+    "valve_status": {
+      "valve_n2": {
+        "valve_id": "valve_n2",
+        "state": "closed"
+      }
+    },
+    "system_status": {
+      "avg_temperature": 42.96,
+      "avg_pressure": 96.44,
+      "active_valves": 0
+    },
+    "metadata": {
+      "data_points": 23,
+      "uptime": 113.44930815696716
+    }
+  },
+  {
+    "timestamp": 1777539526.70613,
+    "pipeline_id": "N2",
+    "sector_id": "sector-north",
+    "status": "active",
+    "bolt_data": {
+      "bolt_n2": {
+        "temperature": 50.0,
+        "pressure": 95.87
+      }
+    },
+    "valve_status": {
+      "valve_n2": {
+        "valve_id": "valve_n2",
+        "state": "closed"
+      }
+    },
+    "system_status": {
+      "avg_temperature": 50.0,
+      "avg_pressure": 95.87,
+      "active_valves": 0
+    },
+    "metadata": {
+      "data_points": 24,
+      "uptime": 118.5829610824585
+    }
+  },
+  {
+    "timestamp": 1777539531.830501,
+    "pipeline_id": "N2",
+    "sector_id": "sector-north",
+    "status": "active",
+    "bolt_data": {
+      "bolt_n2": {
+        "temperature": 50.0,
+        "pressure": 95.88
+      }
+    },
+    "valve_status": {
+      "valve_n2": {
+        "valve_id": "valve_n2",
+        "state": "closed"
+      }
+    },
+    "system_status": {
+      "avg_temperature": 50.0,
+      "avg_pressure": 95.88,
+      "active_valves": 0
+    },
+    "metadata": {
+      "data_points": 25,
+      "uptime": 123.70733404159546
+    }
+  },
+  {
+    "timestamp": 1777539536.9703228,
+    "pipeline_id": "N2",
+    "sector_id": "sector-north",
+    "status": "active",
+    "bolt_data": {
+      "bolt_n2": {
+        "temperature": 42.83,
+        "pressure": 96.0
+      }
+    },
+    "valve_status": {
+      "valve_n2": {
+        "valve_id": "valve_n2",
+        "state": "closed"
+      }
+    },
+    "system_status": {
+      "avg_temperature": 42.83,
+      "avg_pressure": 96.0,
+      "active_valves": 0
+    },
+    "metadata": {
+      "data_points": 26,
+      "uptime": 128.84715604782104
+    }
+  },
+  {
+    "timestamp": 1777539542.097165,
+    "pipeline_id": "N2",
+    "sector_id": "sector-north",
+    "status": "active",
+    "bolt_data": {
+      "bolt_n2": {
+        "temperature": 37.68,
+        "pressure": 95.64
+      }
+    },
+    "valve_status": {
+      "valve_n2": {
+        "valve_id": "valve_n2",
+        "state": "closed"
+      }
+    },
+    "system_status": {
+      "avg_temperature": 37.68,
+      "avg_pressure": 95.64,
+      "active_valves": 0
+    },
+    "metadata": {
+      "data_points": 27,
+      "uptime": 133.97399592399597
+    }
+  },
+  {
+    "timestamp": 1777539547.193821,
+    "pipeline_id": "N2",
+    "sector_id": "sector-north",
+    "status": "active",
+    "bolt_data": {
+      "bolt_n2": {
+        "temperature": 53.33,
+        "pressure": 119.66
+      }
+    },
+    "valve_status": {
+      "valve_n2": {
+        "valve_id": "valve_n2",
+        "state": "closed"
+      }
+    },
+    "system_status": {
+      "avg_temperature": 53.33,
+      "avg_pressure": 119.66,
+      "active_valves": 0
+    },
+    "metadata": {
+      "data_points": 28,
+      "uptime": 139.0706491470337
+    }
+  },
+  {
+    "timestamp": 1777539552.310049,
+    "pipeline_id": "N2",
+    "sector_id": "sector-north",
+    "status": "active",
+    "bolt_data": {
+      "bolt_n2": {
+        "temperature": 33.51,
+        "pressure": 96.22
+      }
+    },
+    "valve_status": {
+      "valve_n2": {
+        "valve_id": "valve_n2",
+        "state": "closed"
+      }
+    },
+    "system_status": {
+      "avg_temperature": 33.51,
+      "avg_pressure": 96.22,
+      "active_valves": 0
+    },
+    "metadata": {
+      "data_points": 29,
+      "uptime": 144.18688201904297
+    }
+  },
+  {
+    "timestamp": 1777539557.4481869,
+    "pipeline_id": "N2",
+    "sector_id": "sector-north",
+    "status": "active",
+    "bolt_data": {
+      "bolt_n2": {
+        "temperature": 33.14,
+        "pressure": 96.35
+      }
+    },
+    "valve_status": {
+      "valve_n2": {
+        "valve_id": "valve_n2",
+        "state": "closed"
+      }
+    },
+    "system_status": {
+      "avg_temperature": 33.14,
+      "avg_pressure": 96.35,
+      "active_valves": 0
+    },
+    "metadata": {
+      "data_points": 30,
+      "uptime": 149.32501912117004
+    }
+  },
+  {
+    "timestamp": 1777539562.592768,
+    "pipeline_id": "N2",
+    "sector_id": "sector-north",
+    "status": "active",
+    "bolt_data": {
+      "bolt_n2": {
+        "temperature": 32.65,
+        "pressure": 96.25
+      }
+    },
+    "valve_status": {
+      "valve_n2": {
+        "valve_id": "valve_n2",
+        "state": "closed"
+      }
+    },
+    "system_status": {
+      "avg_temperature": 32.65,
+      "avg_pressure": 96.25,
+      "active_valves": 0
+    },
+    "metadata": {
+      "data_points": 31,
+      "uptime": 154.46959519386292
+    }
+  },
+  {
+    "timestamp": 1777539567.729721,
+    "pipeline_id": "N2",
+    "sector_id": "sector-north",
+    "status": "active",
+    "bolt_data": {
+      "bolt_n2": {
+        "temperature": 32.17,
+        "pressure": 96.26
+      }
+    },
+    "valve_status": {
+      "valve_n2": {
+        "valve_id": "valve_n2",
+        "state": "closed"
+      }
+    },
+    "system_status": {
+      "avg_temperature": 32.17,
+      "avg_pressure": 96.26,
+      "active_valves": 0
+    },
+    "metadata": {
+      "data_points": 32,
+      "uptime": 159.60655903816223
+    }
+  },
+  {
+    "timestamp": 1777539572.860818,
+    "pipeline_id": "N2",
+    "sector_id": "sector-north",
+    "status": "active",
+    "bolt_data": {
+      "bolt_n2": {
+        "temperature": 32.43,
+        "pressure": 95.87
+      }
+    },
+    "valve_status": {
+      "valve_n2": {
+        "valve_id": "valve_n2",
+        "state": "closed"
+      }
+    },
+    "system_status": {
+      "avg_temperature": 32.43,
+      "avg_pressure": 95.87,
+      "active_valves": 0
+    },
+    "metadata": {
+      "data_points": 33,
+      "uptime": 164.73765110969543
+    }
+  },
+  {
+    "timestamp": 1777539577.9634628,
+    "pipeline_id": "N2",
+    "sector_id": "sector-north",
+    "status": "active",
+    "bolt_data": {
+      "bolt_n2": {
+        "temperature": 32.27,
+        "pressure": 95.82
+      }
+    },
+    "valve_status": {
+      "valve_n2": {
+        "valve_id": "valve_n2",
+        "state": "closed"
+      }
+    },
+    "system_status": {
+      "avg_temperature": 32.27,
+      "avg_pressure": 95.82,
+      "active_valves": 0
+    },
+    "metadata": {
+      "data_points": 34,
+      "uptime": 169.8402910232544
+    }
+  },
+  {
+    "timestamp": 1777539583.0692842,
+    "pipeline_id": "N2",
+    "sector_id": "sector-north",
+    "status": "active",
+    "bolt_data": {
+      "bolt_n2": {
+        "temperature": 31.73,
+        "pressure": 96.01
+      }
+    },
+    "valve_status": {
+      "valve_n2": {
+        "valve_id": "valve_n2",
+        "state": "closed"
+      }
+    },
+    "system_status": {
+      "avg_temperature": 31.73,
+      "avg_pressure": 96.01,
+      "active_valves": 0
+    },
+    "metadata": {
+      "data_points": 35,
+      "uptime": 174.9461350440979
+    }
+  },
+  {
+    "timestamp": 1777539588.188258,
+    "pipeline_id": "N2",
+    "sector_id": "sector-north",
+    "status": "active",
+    "bolt_data": {
+      "bolt_n2": {
+        "temperature": 31.91,
+        "pressure": 96.29
+      }
+    },
+    "valve_status": {
+      "valve_n2": {
+        "valve_id": "valve_n2",
+        "state": "closed"
+      }
+    },
+    "system_status": {
+      "avg_temperature": 31.91,
+      "avg_pressure": 96.29,
+      "active_valves": 0
+    },
+    "metadata": {
+      "data_points": 36,
+      "uptime": 180.06508708000183
+    }
+  },
+  {
+    "timestamp": 1777539593.334412,
+    "pipeline_id": "N2",
+    "sector_id": "sector-north",
+    "status": "active",
+    "bolt_data": {
+      "bolt_n2": {
+        "temperature": 32.12,
+        "pressure": 96.35
+      }
+    },
+    "valve_status": {
+      "valve_n2": {
+        "valve_id": "valve_n2",
+        "state": "closed"
+      }
+    },
+    "system_status": {
+      "avg_temperature": 32.12,
+      "avg_pressure": 96.35,
+      "active_valves": 0
+    },
+    "metadata": {
+      "data_points": 37,
+      "uptime": 185.21124029159546
+    }
+  },
+  {
+    "timestamp": 1777539598.467191,
+    "pipeline_id": "N2",
+    "sector_id": "sector-north",
+    "status": "active",
+    "bolt_data": {
+      "bolt_n2": {
+        "temperature": 34.06,
+        "pressure": 96.23
+      }
+    },
+    "valve_status": {
+      "valve_n2": {
+        "valve_id": "valve_n2",
+        "state": "closed"
+      }
+    },
+    "system_status": {
+      "avg_temperature": 34.06,
+      "avg_pressure": 96.23,
+      "active_valves": 0
+    },
+    "metadata": {
+      "data_points": 38,
+      "uptime": 190.34402108192444
     }
   }
 ]

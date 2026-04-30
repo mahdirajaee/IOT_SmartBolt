@@ -1,7 +1,7 @@
 {
   "projectOwner": "Mahdi Rajaee, Mohammad Eftekharipour, Tanin Heidarloui Moghaddam",
   "projectName": "IoT Pipeline Monitoring System",
-  "lastUpdate": "2026-04-26 21:50",
+  "lastUpdate": "2026-04-30 10:57",
   "broker": {
     "IP": "localhost",
     "port": 1883
@@ -17,37 +17,37 @@
       "serviceID": "analytics",
       "REST_endpoint": "http://localhost:8083",
       "MQTT_topic": "sectors/+/pipelines/+/measurements,sectors/+/pipelines/+/alerts/+",
-      "timestamp": "2026-04-26 21:38"
+      "timestamp": "2026-04-30 10:56"
     },
     {
       "serviceID": "control_center",
       "REST_endpoint": "http://localhost:8085",
       "MQTT_topic": "sectors/+/pipelines/+/commands/valves,telegram/commands/+",
-      "timestamp": "2026-04-26 21:38"
+      "timestamp": "2026-04-30 10:56"
     },
     {
       "serviceID": "raspberry_pi_north",
       "REST_endpoint": "http://localhost:8086",
       "MQTT_topic": "sectors/sector-north/pipelines/+/measurements,sectors/sector-north/pipelines/+/commands/valves",
-      "timestamp": "2026-04-26 21:38"
+      "timestamp": "2026-04-30 10:56"
     },
     {
       "serviceID": "telegram_bot",
       "REST_endpoint": "http://localhost:8087",
       "MQTT_topic": "sectors/+/pipelines/+/alerts/+,alerts/anomalies/+,telegram/commands/+",
-      "timestamp": "2026-04-26 21:38"
+      "timestamp": "2026-04-30 10:57"
     },
     {
       "serviceID": "raspberry_pi_south",
       "REST_endpoint": "http://localhost:8088",
       "MQTT_topic": "sectors/sector-south/pipelines/+/measurements,sectors/sector-south/pipelines/+/commands/valves",
-      "timestamp": "2026-04-26 21:38"
+      "timestamp": "2026-04-30 10:56"
     },
     {
       "serviceID": "message_broker",
       "REST_endpoint": "http://localhost:8089",
       "MQTT_topic": "sectors/+/pipelines/+/#,telegram/commands/+,alerts/anomalies/+",
-      "timestamp": "2026-04-26 21:38"
+      "timestamp": "2026-04-30 10:55"
     },
     {
       "serviceID": "test_service",
@@ -59,13 +59,19 @@
       "serviceID": "account_manager",
       "REST_endpoint": "http://localhost:8084",
       "MQTT_topic": "",
-      "timestamp": "2026-04-26 21:38"
+      "timestamp": "2026-04-30 10:55"
     },
     {
       "serviceID": "timeseries_db",
       "REST_endpoint": "http://localhost:8082",
       "MQTT_topic": "",
-      "timestamp": "2026-04-26 21:38"
+      "timestamp": "2026-04-30 10:55"
+    },
+    {
+      "serviceID": "web_dashboard",
+      "REST_endpoint": "http://127.0.0.1:8090",
+      "MQTT_topic": "",
+      "timestamp": "2026-04-30 10:57"
     }
   ],
   "usersList": [
