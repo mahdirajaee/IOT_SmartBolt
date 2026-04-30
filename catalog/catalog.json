@@ -1,7 +1,7 @@
 {
   "projectOwner": "Mahdi Rajaee, Mohammad Eftekharipour, Tanin Heidarloui Moghaddam",
   "projectName": "IoT Pipeline Monitoring System",
-  "lastUpdate": "2026-04-30 10:57",
+  "lastUpdate": "2026-04-30 11:24",
   "broker": {
     "IP": "localhost",
     "port": 1883
@@ -23,7 +23,7 @@
       "serviceID": "control_center",
       "REST_endpoint": "http://localhost:8085",
       "MQTT_topic": "sectors/+/pipelines/+/commands/valves,telegram/commands/+",
-      "timestamp": "2026-04-30 10:56"
+      "timestamp": "2026-04-30 11:24"
     },
     {
       "serviceID": "raspberry_pi_north",
@@ -58,12 +58,6 @@
     {
       "serviceID": "account_manager",
       "REST_endpoint": "http://localhost:8084",
-      "MQTT_topic": "",
-      "timestamp": "2026-04-30 10:55"
-    },
-    {
-      "serviceID": "timeseries_db",
-      "REST_endpoint": "http://localhost:8082",
       "MQTT_topic": "",
       "timestamp": "2026-04-30 10:55"
     },

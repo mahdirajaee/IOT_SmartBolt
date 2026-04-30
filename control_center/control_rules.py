@@ -1,4 +1,3 @@
-# control rules - 12 rules for valve decisions
 import os
 import logging
 from typing import Dict, Any, List, Optional, Callable
@@ -45,31 +44,11 @@ class ControlRules:
         self.rules = self._initialize_rules()
         self.override_mode = False
         self.emergency_mode = False
-        
+
     def _initialize_rules(self) -> List[ControlRule]:
-        # double check priority numbers with professor
-        pred_threshold = float(os.getenv("PREDICTION_THRESHOLD_TEMP", 55.0))
-        low_health = int(os.getenv("LOW_HEALTH_THRESHOLD", 30))
-        moderate_health = int(os.getenv("MODERATE_HEALTH_THRESHOLD", 50))
         recovery_health = int(os.getenv("RECOVERY_HEALTH_THRESHOLD", 80))
 
         return [
-            ControlRule(
-                name="critical_risk_pressure",
-                rule_type=RuleType.COMBINED,
-                condition=lambda data: (
-                    data.get("risk_level") == "critical" and
-                    any(
-                        a.get("type") in ["high_pressure", "pressure_threshold", "pressure_anomaly", "combined_high"] or
-                        (a.get("sensor_type") == "pressure" and a.get("severity") in ["high", "critical"])
-                        for a in data.get("anomalies", [])
-                    )
-                ),
-                action=ActionType.OPEN_VALVE,
-                priority=100,
-                description="Open valve to relieve pressure on critical risk (pressure safety)"
-            ),
-
             ControlRule(
                 name="critical_risk_temp_only",
                 rule_type=RuleType.COMBINED,
@@ -127,88 +106,6 @@ class ControlRules:
                 description="Close valve on leak detection (isolate section)"
             ),
 
-            # sensor down = close just in case
-            ControlRule(
-                name="sensor_failure",
-                rule_type=RuleType.ANOMALY,
-                condition=lambda data: any(
-                    a.get("type") == "sensor_failure" for a in data.get("anomalies", [])
-                ),
-                action=ActionType.CLOSE_VALVE,
-                priority=85,
-                description="Close valve on sensor failure (safety precaution)"
-            ),
-
-            # predicted high = alert operator
-            ControlRule(
-                name="prediction_threshold_breach",
-                rule_type=RuleType.PREDICTION,
-                condition=lambda data: (
-                    data.get("predictions", {}).get("trend") == "increasing" and
-                    data.get("predictions", {}).get("next_values", [0])[0] > pred_threshold
-                ),
-                action=ActionType.ALERT_OPERATOR,
-                priority=80,
-                description="Alert operator on predicted threshold breach"
-            ),
-
-            # 3+ anomalies = something wrong
-            ControlRule(
-                name="multiple_anomalies",
-                rule_type=RuleType.ANOMALY,
-                condition=lambda data: len(data.get("anomalies", [])) >= 3,
-                action=ActionType.ALERT_OPERATOR,
-                priority=75,
-                description="Alert operator on multiple simultaneous anomalies"
-            ),
-
-            ControlRule(
-                name="combined_high_anomaly",
-                rule_type=RuleType.ANOMALY,
-                condition=lambda data: any(
-                    a.get("type") == "combined_high" for a in data.get("anomalies", [])
-                ),
-                action=ActionType.OPEN_VALVE,
-                priority=70,
-                description="Open valve on combined high temperature and pressure to relieve pressure"
-            ),
-
-            # fast changes = alert
-            ControlRule(
-                name="rapid_change_detected",
-                rule_type=RuleType.ANOMALY,
-                condition=lambda data: any(
-                    a.get("type") == "rapid_change" and a.get("severity") in ["high", "critical"]
-                    for a in data.get("anomalies", [])
-                ),
-                action=ActionType.ALERT_OPERATOR,
-                priority=60,
-                description="Alert operator on rapid changes"
-            ),
-
-            # health < 30 = close
-            ControlRule(
-                name="low_health_score",
-                rule_type=RuleType.COMBINED,
-                condition=lambda data, t=low_health: data.get("health_score", 100) < t,
-                action=ActionType.CLOSE_VALVE,
-                priority=50,
-                description="Close valve on low system health"
-            ),
-
-            # medium risk = alert
-            ControlRule(
-                name="moderate_risk",
-                rule_type=RuleType.COMBINED,
-                condition=lambda data: (
-                    data.get("risk_level") == "medium" and
-                    data.get("health_score", 100) < moderate_health
-                ),
-                action=ActionType.ALERT_OPERATOR,
-                priority=40,
-                description="Alert operator on moderate risk"
-            ),
-
             # everything ok = open back up
             ControlRule(
                 name="system_recovery",
@@ -223,7 +120,7 @@ class ControlRules:
                 description="Open valve when system recovers"
             )
         ]
-    
+
     def evaluate_rules(self, analytics_data: Dict[str, Any]) -> Optional[ControlDecision]:
         if self.emergency_mode:
             return ControlDecision(
@@ -234,20 +131,20 @@ class ControlRules:
                 rule_name="emergency_override",
                 priority=999
             )
-        
+
         applicable_rules = []
-        
+
         for rule in self.rules:
             if not rule.enabled:
                 continue
-            
+
             try:
                 if rule.condition(analytics_data):
                     applicable_rules.append(rule)
                     logger.debug(f"Rule '{rule.name}' matched")
             except Exception as e:
                 logger.error(f"Error evaluating rule '{rule.name}': {e}")
-        
+
         if not applicable_rules:
             return ControlDecision(
                 action=ActionType.NO_ACTION,
@@ -257,11 +154,11 @@ class ControlRules:
                 rule_name="default",
                 priority=0
             )
-        
+
         highest_priority_rule = max(applicable_rules, key=lambda r: r.priority)
-        
+
         confidence = self._calculate_confidence(analytics_data, highest_priority_rule)
-        
+
         return ControlDecision(
             action=highest_priority_rule.action,
             valves=self._get_affected_valves(analytics_data),
@@ -270,24 +167,24 @@ class ControlRules:
             rule_name=highest_priority_rule.name,
             priority=highest_priority_rule.priority
         )
-    
+
     def _calculate_confidence(self, data: Dict[str, Any], rule: ControlRule) -> float:
         base_confidence = 0.7
-        
+
         if data.get("risk_level") == "critical":
             base_confidence += 0.2
         elif data.get("risk_level") == "high":
             base_confidence += 0.1
-        
+
         anomaly_count = len(data.get("anomalies", []))
         if anomaly_count > 2:
             base_confidence += 0.1
-        
+
         if rule.priority > 80:
             base_confidence += 0.1
-        
+
         return min(base_confidence, 1.0)
-    
+
     def _get_affected_valves(self, data: Dict[str, Any]) -> List[str]:
         if "valve_ids" in data and data["valve_ids"]:
             return data["valve_ids"]
@@ -297,12 +194,12 @@ class ControlRules:
             return [f"valve_{pipeline_id.lower()}"]
 
         return []
-    
+
     def add_rule(self, rule: ControlRule):
         self.rules.append(rule)
         self.rules.sort(key=lambda r: r.priority, reverse=True)
         logger.info(f"Added control rule: {rule.name}")
-    
+
     def remove_rule(self, rule_name: str) -> bool:
         for i, rule in enumerate(self.rules):
             if rule.name == rule_name:
@@ -310,7 +207,7 @@ class ControlRules:
                 logger.info(f"Removed control rule: {rule_name}")
                 return True
         return False
-    
+
     def enable_rule(self, rule_name: str) -> bool:
         for rule in self.rules:
             if rule.name == rule_name:
@@ -318,7 +215,7 @@ class ControlRules:
                 logger.info(f"Enabled control rule: {rule_name}")
                 return True
         return False
-    
+
     def disable_rule(self, rule_name: str) -> bool:
         for rule in self.rules:
             if rule.name == rule_name:
@@ -326,15 +223,15 @@ class ControlRules:
                 logger.info(f"Disabled control rule: {rule_name}")
                 return True
         return False
-    
+
     def set_emergency_mode(self, enabled: bool):
         self.emergency_mode = enabled
         logger.warning(f"Emergency mode {'enabled' if enabled else 'disabled'}")
-    
+
     def set_override_mode(self, enabled: bool):
         self.override_mode = enabled
         logger.info(f"Override mode {'enabled' if enabled else 'disabled'}")
-    
+
     def get_rules_summary(self) -> List[Dict[str, Any]]:
         return [{
             "name": rule.name,
