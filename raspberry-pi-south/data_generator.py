@@ -222,8 +222,27 @@ class Pipeline:
 
         for bolt_id, bolt in self.bolts.items():
             bolt_data[bolt_id] = bolt.generate_data()
-            avg_temp += bolt_data[bolt_id]["temperature"]
-            avg_pressure += bolt_data[bolt_id]["pressure"]
+
+        if not hasattr(self, "_valve_offset_pressure"):
+            self._valve_offset_pressure = 0.0
+            self._valve_offset_temp = 0.0
+
+        any_valve_open = any(v.state == "open" for v in self.valves.values())
+        if any_valve_open:
+            self._valve_offset_pressure = min(self._valve_offset_pressure + 5, 50)
+            self._valve_offset_temp = min(self._valve_offset_temp + 1.5, 25)
+        else:
+            self._valve_offset_pressure = max(self._valve_offset_pressure - 5, 0)
+            self._valve_offset_temp = max(self._valve_offset_temp - 1.5, 0)
+
+        for bolt_id, b in bolt_data.items():
+            bolt = self.bolts[bolt_id]
+            b["pressure"] = max(b["pressure"] - self._valve_offset_pressure, bolt.limits.pressure_min)
+            b["temperature"] = max(b["temperature"] - self._valve_offset_temp, bolt.limits.temp_min)
+
+        for b in bolt_data.values():
+            avg_temp += b["temperature"]
+            avg_pressure += b["pressure"]
 
         if bolt_count > 0:
             avg_temp /= bolt_count

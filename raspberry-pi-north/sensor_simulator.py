@@ -139,37 +139,7 @@ class SensorSimulator:
                 self.stats["failed_publishes"] += 1
 
             self.stats["total_messages"] += 1
-
-            if self.persist_data:
-                self._save_data_to_file(pipeline_id, data)
-    
-    def _save_data_to_file(self, pipeline_id, data):
-        try:
-            filename = f"pipeline_{pipeline_id}.json"
-            filepath = os.path.join(self.data_folder, filename)
             
-            if os.path.exists(filepath):
-                with open(filepath, 'r') as f:
-                    try:
-                        existing = json.load(f)
-                        if not isinstance(existing, list):
-                            existing = []
-                    except json.JSONDecodeError:
-                        existing = []
-            else:
-                existing = []
-
-            existing.append(data)
-
-            max_entries = int(os.getenv("MAX_DATA_ENTRIES", 1000))
-            if len(existing) > max_entries:
-                existing = existing[-max_entries:]
-            
-            with open(filepath, 'w') as f:
-                json.dump(existing, f, indent=2)
-                
-        except Exception as e:
-            logger.error(f"Error saving data to file: {e}")
     
     def _handle_valve_command(self, topic, payload):
         try:

@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 class PipelineManager:
 
     def __init__(self):
-        self.config_lock = threading.Lock()
+        self.config_lock = threading.RLock()
         self.pipelines: Dict[str, Pipeline] = {}
         self.observers = []
         self.observers:list[Callable]
