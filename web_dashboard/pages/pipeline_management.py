@@ -1,4 +1,4 @@
-from dash import html, dcc, callback, Input, Output, State, ALL, ctx
+from dash import html, dcc, Input, Output, State, ALL, ctx
 from dash.exceptions import PreventUpdate
 import dash_bootstrap_components as dbc
 import json
@@ -382,7 +382,8 @@ def register_callbacks(app, service_client):
          Output('temp-max-input', 'value'),
          Output('pressure-min-input', 'value'),
          Output('pressure-max-input', 'value'),
-         Output('pipeline-id-input', 'disabled')],
+         Output('pipeline-id-input', 'disabled'),
+         Output('pipeline-modal-save', 'children')],
         [Input('create-pipeline-button', 'n_clicks'),
          Input({'type': 'edit-pipeline-btn', 'index': ALL}, 'n_clicks'),
          Input('pipeline-modal-cancel', 'n_clicks')],
@@ -395,10 +396,10 @@ def register_callbacks(app, service_client):
         trigger = ctx.triggered[0]['prop_id']
 
         if 'pipeline-modal-cancel' in trigger:
-            return False, "", "create", None, "", "", None, "", "", 20.0, 50.0, 80.0, 120.0, False
+            return False, "", "create", None, "", "", None, "", "", 20.0, 50.0, 80.0, 120.0, False, "Create Pipeline"
 
         if 'create-pipeline-button' in trigger and create_clicks:
-            return True, "Create New Pipeline Bundle", "create", None, "", "", None, "", "", 20.0, 50.0, 80.0, 120.0, False
+            return True, "Create New Pipeline Bundle", "create", None, "", "", None, "", "", 20.0, 50.0, 80.0, 120.0, False, "Create Pipeline"
 
         if 'edit-pipeline-btn' in trigger and any(edit_clicks):
             pipeline_id = json.loads(trigger.split('.')[0])['index']
@@ -420,7 +421,8 @@ def register_callbacks(app, service_client):
                 sensor_limits.get('temp_max', 50.0),
                 sensor_limits.get('pressure_min', 80.0),
                 sensor_limits.get('pressure_max', 120.0),
-                True
+                True,
+                "Save Changes"
             )
 
         raise PreventUpdate

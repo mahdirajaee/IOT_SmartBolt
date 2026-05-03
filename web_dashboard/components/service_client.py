@@ -8,7 +8,7 @@ logger = logging.getLogger(__name__)
 
 class ServiceClient:
     def __init__(self):
-        self.resource_catalog_url = os.getenv('CATALOG_URL', 'http://localhost:8081')
+        self.catalog_url = os.getenv('CATALOG_URL', 'http://localhost:8081')
         self.timeseries_url = os.getenv('TIMESERIES_DB_URL', os.getenv('TIMESERIES_URL', 'http://localhost:8082'))
         self.analytics_url = os.getenv('ANALYTICS_URL', 'http://localhost:8083')
         self.control_center_url = os.getenv('CONTROL_CENTER_URL', 'http://localhost:8085')
@@ -30,7 +30,7 @@ class ServiceClient:
             return None
 
     def get_pipelines(self) -> List[Dict]:
-        response = self._make_request('GET', f"{self.resource_catalog_url}/pipelines")
+        response = self._make_request('GET', f"{self.catalog_url}/pipelines")
         if not response:
             return []
         pipelines_map = response.get('pipelines') or {}
@@ -57,7 +57,7 @@ class ServiceClient:
         return [p for p in all_pipelines if p.get('location', {}).get('sector') == sector_id]
 
     def get_pipeline(self, pipeline_id: str) -> Optional[Dict]:
-        response = self._make_request('GET', f"{self.resource_catalog_url}/pipelines/{pipeline_id}")
+        response = self._make_request('GET', f"{self.catalog_url}/pipelines/{pipeline_id}")
         if not response:
             return None
         pipeline = response.get('pipeline') or {}
@@ -88,7 +88,7 @@ class ServiceClient:
         }
 
     def get_services_status(self) -> List[Dict]:
-        response = self._make_request('GET', f"{self.resource_catalog_url}/services")
+        response = self._make_request('GET', f"{self.catalog_url}/services")
         if not response:
             return []
         services = response.get('services') or {}
@@ -143,7 +143,7 @@ class ServiceClient:
             logger.error(f"Error getting statistics: {e}")
             return {'temperature': {}, 'pressure': {}}
 
-    def get_anomalies(self, pipeline_id: Optional[str] = None, limit: int = 50, bolt_id: Optional[str] = None, severity: Optional[str] = None, hours: int = 24) -> List[Dict]:
+    def get_alerts(self, pipeline_id: Optional[str] = None, limit: int = 50, bolt_id: Optional[str] = None, severity: Optional[str] = None, hours: int = 24) -> List[Dict]:
         params = {'limit': limit}
         if pipeline_id:
             params['pipeline_id'] = pipeline_id
@@ -172,7 +172,7 @@ class ServiceClient:
         return mapped[:limit]
 
     def get_predictions(self, pipeline_id: str) -> Dict:
-        details = self._make_request('GET', f"{self.resource_catalog_url}/pipelines/{pipeline_id}")
+        details = self._make_request('GET', f"{self.catalog_url}/pipelines/{pipeline_id}")
         if not details:
             return {}
 
@@ -204,7 +204,7 @@ class ServiceClient:
     def get_pipeline_health(self, pipeline_id: str, bolt_id: Optional[str] = None) -> Dict:
         bid = bolt_id
         if not bid:
-            details = self._make_request('GET', f"{self.resource_catalog_url}/pipelines/{pipeline_id}")
+            details = self._make_request('GET', f"{self.catalog_url}/pipelines/{pipeline_id}")
             if details:
                 bolts = details.get('bolts') or []
                 if bolts:
@@ -280,7 +280,7 @@ class ServiceClient:
         return response or {'error': 'Failed to delete user'}
 
     def get_user_sectors(self, user_id: int) -> List[str]:
-        response = self._make_request('GET', f"{self.resource_catalog_url}/users/{user_id}")
+        response = self._make_request('GET', f"{self.catalog_url}/users/{user_id}")
         if not response or 'user' not in response:
             return []
         sectors = response.get('user', {}).get('sectors', [])
@@ -308,24 +308,17 @@ class ServiceClient:
 
     def get_all_pipeline_bundles(self, token: str) -> Dict:
         headers = {'Authorization': f'Bearer {token}'}
-        response = self._make_request('GET', f"{self.resource_catalog_url}/pipelines", headers=headers)
+        response = self._make_request('GET', f"{self.catalog_url}/pipelines", headers=headers)
         if not response:
             return []
         return response.get('pipeline_bundles', {})
-
-    def get_pipeline_bundle(self, token: str, pipeline_id: str) -> Optional[Dict]:
-        headers = {'Authorization': f'Bearer {token}'}
-        response = self._make_request('GET', f"{self.resource_catalog_url}/pipelines/{pipeline_id}", headers=headers)
-        if not response:
-            return None
-        return response.get('pipeline_bundle')
 
     def create_pipeline_bundle(self, token: str, bundle_data: Dict) -> Dict:
         headers = {
             'Authorization': f'Bearer {token}',
             'Content-Type': 'application/json'
         }
-        response = self._make_request('POST', f"{self.resource_catalog_url}/pipelines",
+        response = self._make_request('POST', f"{self.catalog_url}/pipelines",
                                     headers=headers, json=bundle_data)
         return response or {'error': 'Failed to create pipeline bundle'}
 
@@ -334,15 +327,13 @@ class ServiceClient:
             'Authorization': f'Bearer {token}',
             'Content-Type': 'application/json'
         }
-        response = self._make_request('PUT', f"{self.resource_catalog_url}/pipelines/{pipeline_id}",
+        response = self._make_request('PUT', f"{self.catalog_url}/pipelines/{pipeline_id}",
                                     headers=headers, json=updates)
         return response or {'error': 'Failed to update pipeline bundle'}
 
     def delete_pipeline_bundle(self, token: str, pipeline_id: str) -> Dict:
         headers = {'Authorization': f'Bearer {token}'}
-        response = self._make_request('DELETE', f"{self.resource_catalog_url}/pipelines/{pipeline_id}",
+        response = self._make_request('DELETE', f"{self.catalog_url}/pipelines/{pipeline_id}",
                                     headers=headers)
         return response or {'error': 'Failed to delete pipeline bundle'}
 
-    def close(self):
-        self.session.close()

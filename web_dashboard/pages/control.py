@@ -1,4 +1,4 @@
-from dash import html, dcc, callback, Input, Output, State
+from dash import html, dcc, Input, Output, State
 import dash
 import dash_bootstrap_components as dbc
 from datetime import datetime
@@ -227,6 +227,10 @@ def create_layout(service_client, auth_token):
 
         dcc.Store(id="control-auth-token", data=auth_token),
 
+        dbc.Alert(id="control-feedback", is_open=False, duration=4000, dismissable=True,
+                  style={'position': 'fixed', 'top': '80px', 'right': '20px', 'zIndex': 9999, 'minWidth': '300px',
+                         'boxShadow': '0 8px 24px rgba(0,0,0,0.15)', 'borderRadius': '12px'}),
+
         dcc.Interval(
             id='control-interval',
             interval=int(os.getenv('AUTO_REFRESH_INTERVAL', 5000)) * 2,
@@ -391,7 +395,7 @@ def register_callbacks(app, service_client):
 
         critical_warning = None
         if pipeline_id:
-            alerts = service_client.get_anomalies(pipeline_id=pipeline_id, limit=5)
+            alerts = service_client.get_alerts(pipeline_id=pipeline_id, limit=5)
             critical_alerts = [a for a in alerts if a.get('severity') == 'critical']
             if critical_alerts and triggered_id != 'close-all-valves-btn':
                 critical_warning = dbc.Alert([
@@ -441,7 +445,10 @@ def register_callbacks(app, service_client):
         return True, message, action_data
 
     @app.callback(
-        Output('control-history-list', 'children'),
+        [Output('control-history-list', 'children'),
+         Output('control-feedback', 'children'),
+         Output('control-feedback', 'color'),
+         Output('control-feedback', 'is_open')],
         [Input('confirm-action', 'n_clicks'),
          Input('control-history-refresh', 'n_clicks'),
          Input('control-interval', 'n_intervals')],
@@ -454,21 +461,30 @@ def register_callbacks(app, service_client):
         ctx = dash.callback_context
         triggered_id = ctx.triggered[0]['prop_id'].split('.')[0] if ctx.triggered else None
 
+        feedback_msg = ""
+        feedback_color = "info"
+        feedback_open = False
+
         if triggered_id == 'confirm-action' and pending_action:
             result = execute_valve_control(pending_action, auth_token, service_client)
+            action_type = pending_action.get('type', '')
             if result:
-                pass
+                feedback_msg = f"Command '{action_type.replace('_', ' ')}' executed successfully."
+                feedback_color = "success"
+            else:
+                feedback_msg = f"Command '{action_type.replace('_', ' ')}' failed. Check logs for details."
+                feedback_color = "danger"
+            feedback_open = True
 
         history = service_client.get_control_history(auth_token) if auth_token else []
 
         if not history:
-            return html.P("No control history available", className="text-muted")
+            return html.P("No control history available", className="text-muted"), feedback_msg, feedback_color, feedback_open
 
         history_items = []
         for entry in history[:20]:
             timestamp = entry.get('timestamp', 'Unknown')
             if isinstance(timestamp, (int, float)):
-                from datetime import datetime
                 timestamp = datetime.fromtimestamp(timestamp).strftime('%Y-%m-%d %H:%M:%S')
 
             pipeline_id = entry.get('pipeline_id', 'Unknown')
@@ -505,7 +521,7 @@ def register_callbacks(app, service_client):
 
             history_items.append(history_card)
 
-        return history_items
+        return history_items, feedback_msg, feedback_color, feedback_open
 
 def execute_valve_control(action_data, auth_token, service_client):
     action_type = action_data.get('type')

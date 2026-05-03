@@ -1,4 +1,4 @@
-from dash import html, dcc, callback, Input, Output
+from dash import html, dcc, Input, Output
 from dash.exceptions import PreventUpdate
 import dash_bootstrap_components as dbc
 import plotly.graph_objs as go
@@ -167,7 +167,7 @@ def register_callbacks(app, service_client):
         avg_pressure = statistics.get('pressure', {}).get('mean')
 
         pipeline_ids = {p['pipeline_id'] for p in pipelines}
-        all_anomalies = service_client.get_anomalies(limit=100)
+        all_anomalies = service_client.get_alerts(limit=100)
         anomalies = [a for a in all_anomalies if not pipeline_ids or a.get('pipeline_id') in pipeline_ids]
         critical_count = sum(1 for a in anomalies if a.get('severity') == 'critical')
         warning_count = sum(1 for a in anomalies if a.get('severity') == 'warning')
@@ -360,10 +360,10 @@ def register_callbacks(app, service_client):
         if sector_filter and sector_filter != 'all':
             sector_pipelines = service_client.get_pipelines_by_sector(sector_filter)
             pipeline_ids = {p['pipeline_id'] for p in sector_pipelines}
-            all_alerts = service_client.get_anomalies(limit=20)
+            all_alerts = service_client.get_alerts(limit=20)
             alerts = [a for a in all_alerts if a.get('pipeline_id') in pipeline_ids][:5]
         else:
-            alerts = service_client.get_anomalies(limit=5)
+            alerts = service_client.get_alerts(limit=5)
 
         if not alerts:
             return html.Div([

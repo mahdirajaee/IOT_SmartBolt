@@ -3,17 +3,22 @@ import json
 import os
 import logging
 import requests
+import time
+import sys
 from dotenv import load_dotenv
 from service_registry import ServiceRegistry
 from device_manager import DeviceManager
 from config_manager import ConfigurationManager
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from internal_auth import resolve_internal_api_key
 
 load_dotenv()
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-class ResourceCatalogWebService(object):
+class CatalogWebService(object):
 
     exposed = True
 
@@ -23,16 +28,21 @@ class ResourceCatalogWebService(object):
         self.service_registry = ServiceRegistry(device_manager=self.device_manager)
         self.config_manager = ConfigurationManager()
         self.account_manager_url = os.getenv("ACCOUNT_MANAGER_URL", "http://localhost:8084")
+        self.internal_api_key = resolve_internal_api_key("catalog")
         self.service_registry.start_health_checks()
 
     def json_response(self, data):
         return json.dumps(data).encode('utf-8')
+
+    def _internal_auth_headers(self):
+        return {"X-Internal-API-Key": self.internal_api_key}
 
     def _proxy_account_manager(self, endpoint, params=None):
         try:
             response = requests.get(
                 f"{self.account_manager_url}/internal/{endpoint}",
                 params=params,
+                headers=self._internal_auth_headers(),
                 timeout=5
             )
             if response.status_code == 200:
@@ -46,12 +56,13 @@ class ResourceCatalogWebService(object):
         try:
             if not path:
                 return self.json_response({
-                    "service": "Resource Catalog",
+                    "service": "Catalog",
                     "status": "active",
                     "endpoints": {
                         "services": {
                             "list_and_health": "GET /services",
-                            "register": "POST /services/register"
+                            "register": "POST /services/register",
+                            "deregister": "DELETE /services/{id}"
                         },
                         "pipelines": {
                             "list": "GET /pipelines",
@@ -63,18 +74,26 @@ class ResourceCatalogWebService(object):
                         "bolts": {
                             "update": "PUT /bolts/{id}"
                         },
+                        "valves": {
+                            "update": "PUT /valves/{id}"
+                        },
                         "users": {
                             "list": "GET /users",
-                            "get": "GET /users/{id}"
-                        },
-                        "sectors": {
-                            "list": "GET /sectors"
+                            "get": "GET /users/{id}",
+                            "update": "PUT /users/{id}"
                         },
                         "config": "GET /config[?section=global|thresholds|rules]"
                     }
                 })
 
             resource = path[0]
+
+            if resource == "health":
+                return self.json_response({
+                    "status": "healthy",
+                    "service": "catalog",
+                    "timestamp": time.time()
+                })
 
             if resource == "services":
                 if len(path) == 1:
@@ -118,10 +137,6 @@ class ResourceCatalogWebService(object):
                     return self.json_response(self._proxy_account_manager("users"))
                 elif len(path) == 2:
                     return self.json_response(self._proxy_account_manager(f"users/{path[1]}"))
-
-            elif resource == "sectors":
-                if len(path) == 1:
-                    return self.json_response({"sectors": self.device_manager.get_sectors()})
 
             elif resource == "config":
                 if len(path) > 1:
@@ -304,6 +319,7 @@ class ResourceCatalogWebService(object):
                             resp = requests.put(
                                 f"{self.account_manager_url}/internal/users/{user_id}",
                                 json={"telegram_chat_id": str(chat_id)},
+                                headers=self._internal_auth_headers(),
                                 timeout=5
                             )
                             if resp.status_code == 200:
@@ -343,6 +359,23 @@ class ResourceCatalogWebService(object):
                     cherrypy.response.status = 404
                     return self.json_response({"error": f"Pipeline bundle '{pipeline_id}' not found"})
 
+            elif resource == "services" and len(path) >= 2:
+                service_id = path[1]
+                removed = self.service_registry.remove_service(service_id)
+                if removed:
+                    return self.json_response({
+                        "message": "Service removed successfully",
+                        "service_id": removed["service_id"],
+                        "service_name": removed["name"]
+                    })
+                if self.device_manager.remove_service_from_catalog(service_id):
+                    return self.json_response({
+                        "message": "Service catalog entry removed successfully",
+                        "service_id": service_id
+                    })
+                cherrypy.response.status = 404
+                return self.json_response({"error": f"Service '{service_id}' not found"})
+
             else:
                 cherrypy.response.status = 404
                 return self.json_response({"error": f"DELETE not supported for resource '{resource}'"})
@@ -375,8 +408,8 @@ def main():
         }
     }
 
-    logger.info(f"Starting Resource Catalog service on {host}:{port}")
-    cherrypy.quickstart(ResourceCatalogWebService(), '/', app_config)
+    logger.info(f"Starting Catalog service on {host}:{port}")
+    cherrypy.quickstart(CatalogWebService(), '/', app_config)
 
 if __name__ == "__main__":
     main()

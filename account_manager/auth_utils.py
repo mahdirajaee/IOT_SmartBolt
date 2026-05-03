@@ -1,7 +1,8 @@
 import jwt
 import bcrypt
 import hashlib
-from datetime import datetime, timedelta
+import secrets
+from datetime import datetime, timedelta, timezone
 import os
 from dotenv import load_dotenv
 import logging
@@ -13,7 +14,12 @@ logger = logging.getLogger(__name__)
 
 class AuthManager:
     def __init__(self):
-        self.secret_key = os.getenv('JWT_SECRET_KEY', 'default-secret-key')
+        configured_key = os.getenv('JWT_SECRET_KEY')
+        if not configured_key or configured_key == 'default-secret-key':
+            self.secret_key = secrets.token_hex(32)
+            logger.warning("JWT_SECRET_KEY not configured - using random secret. Tokens will not survive restarts.")
+        else:
+            self.secret_key = configured_key
         self.algorithm = os.getenv('JWT_ALGORITHM', 'HS256')
         self.expiry_hours = int(os.getenv('JWT_EXPIRY_HOURS', 24))
         self.bcrypt_rounds = int(os.getenv('BCRYPT_ROUNDS', 12))
@@ -30,13 +36,13 @@ class AuthManager:
         return bcrypt.checkpw(password_bytes, hash_bytes)
     
     def generate_token(self, user_id, username, role):
-        expiry = datetime.utcnow() + timedelta(hours=self.expiry_hours)
+        expiry = datetime.now(timezone.utc) + timedelta(hours=self.expiry_hours)
         payload = {
             'user_id': user_id,
             'username': username,
             'role': role,
             'exp': expiry,
-            'iat': datetime.utcnow()
+            'iat': datetime.now(timezone.utc)
         }
         token = jwt.encode(payload, self.secret_key, algorithm=self.algorithm)
         return token, expiry

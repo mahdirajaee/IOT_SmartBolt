@@ -1,4 +1,4 @@
-from dash import html, dcc, callback, Input, Output, State, ALL, ctx
+from dash import html, dcc, Input, Output, State, ALL, ctx
 from dash.exceptions import PreventUpdate
 import dash_bootstrap_components as dbc
 import json
@@ -121,7 +121,7 @@ def create_layout(service_client):
                             dbc.Input(
                                 id="user-password-input",
                                 type="password",
-                                placeholder="Enter password (min 8 characters)"
+                                placeholder="Enter password (min 6 characters)"
                             )
                         ], width=6),
                         dbc.Col([
@@ -359,8 +359,8 @@ def register_callbacks(app, service_client):
             return "Username and email are required.", True, "danger", intervals
 
         if mode == "create":
-            if not password or len(password) < 8:
-                return "Password must be at least 8 characters long.", True, "danger", intervals
+            if not password or len(password) < 6:
+                return "Password must be at least 6 characters long.", True, "danger", intervals
 
             user_data = {
                 'username': username,
@@ -383,10 +383,10 @@ def register_callbacks(app, service_client):
                 'role': role,
                 'sector_id': selected_sector or None
             }
-            if password and len(password) >= 8:
+            if password and len(password) >= 6:
                 updates['password'] = password
-            elif password and len(password) < 8:
-                return "Password must be at least 8 characters long.", True, "danger", intervals
+            elif password and len(password) < 6:
+                return "Password must be at least 6 characters long.", True, "danger", intervals
 
             result = service_client.update_user(auth_data['token'], user_id, updates)
 

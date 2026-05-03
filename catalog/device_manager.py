@@ -1,3 +1,5 @@
+import tempfile
+import threading
 import time
 import logging
 import json
@@ -25,6 +27,7 @@ class DeviceManager:
             "bolts": {},
             "valves": {}
         }
+        self._save_lock = threading.RLock()
         self._load_catalog()
 
     def _load_catalog(self):
@@ -38,6 +41,26 @@ class DeviceManager:
                 logger.error(f"Failed to load catalog: {e}")
         else:
             logger.info(f"No existing catalog found at {self.data_file}")
+
+    @staticmethod
+    def _unique_ids(items):
+        seen = set()
+        ordered = []
+        for item in items:
+            if item and item not in seen:
+                seen.add(item)
+                ordered.append(item)
+        return ordered
+
+    def _derive_sector_owner(self, sector_id, existing_sector=None):
+        if existing_sector and existing_sector.get("userID") not in ("", None):
+            return existing_sector.get("userID")
+
+        for user in self.catalog.get("usersList", []):
+            for sector in user.get("sectors", []):
+                if sector.get("sectorID") == sector_id:
+                    return user.get("userID", "")
+        return ""
 
     def _build_devices_from_catalog(self):
         self.devices = {"pipelines": {}, "bolts": {}, "valves": {}}
@@ -78,7 +101,8 @@ class DeviceManager:
                             "last_temperature": None,
                             "last_pressure": None
                         }
-                        self.devices["pipelines"][pipeline_id]["bolts"].append(device_id)
+                        if device_id not in self.devices["pipelines"][pipeline_id]["bolts"]:
+                            self.devices["pipelines"][pipeline_id]["bolts"].append(device_id)
                     elif "valve" in device_id:
                         self.devices["valves"][device_id] = {
                             "id": device_id,
@@ -92,7 +116,8 @@ class DeviceManager:
                             "last_command": None,
                             "last_command_time": None
                         }
-                        self.devices["pipelines"][pipeline_id]["valves"].append(device_id)
+                        if device_id not in self.devices["pipelines"][pipeline_id]["valves"]:
+                            self.devices["pipelines"][pipeline_id]["valves"].append(device_id)
 
     def _build_catalog_device_entry(self, device_id, device_type, pipeline_id=None):
         if device_type == "bolt":
@@ -133,10 +158,10 @@ class DeviceManager:
                 sectors_map[sid] = []
 
             devices_list = []
-            for bolt_id in pdata.get("bolts", []):
+            for bolt_id in self._unique_ids(pdata.get("bolts", [])):
                 if bolt_id in self.devices["bolts"]:
                     devices_list.append(self._build_catalog_device_entry(bolt_id, "bolt", pid))
-            for valve_id in pdata.get("valves", []):
+            for valve_id in self._unique_ids(pdata.get("valves", [])):
                 if valve_id in self.devices["valves"]:
                     devices_list.append(self._build_catalog_device_entry(valve_id, "valve", pid))
 
@@ -152,7 +177,7 @@ class DeviceManager:
         for sid, pipelines in sectors_map.items():
             existing = existing_sectors.get(sid, {})
             new_sectors.append({
-                "userID": existing.get("userID", ""),
+                "userID": self._derive_sector_owner(sid, existing),
                 "sectorID": sid,
                 "pipelinesList": pipelines
             })
@@ -161,23 +186,33 @@ class DeviceManager:
         self.catalog.pop("devicesList", None)
 
     def _save_catalog(self):
-        try:
-            self._sync_devices_to_catalog()
-            self.catalog["lastUpdate"] = datetime.now().strftime("%Y-%m-%d %H:%M")
-            with open(self.data_file, 'w') as f:
-                json.dump(self.catalog, f, indent=2)
-            logger.info(f"Catalog saved to {self.data_file}")
-        except Exception as e:
-            logger.error(f"Failed to save catalog: {e}")
+        with self._save_lock:
+            tmp_path = None
+            try:
+                self._sync_devices_to_catalog()
+                self.catalog["lastUpdate"] = datetime.now().strftime("%Y-%m-%d %H:%M")
 
-    def get_full_catalog(self):
-        return self.catalog
-
-    def get_broker_config(self):
-        return self.catalog.get("broker", {"IP": "localhost", "port": 1883})
-
-    def get_services_list(self):
-        return self.catalog.get("servicesList", [])
+                target_dir = os.path.dirname(self.data_file) or "."
+                fd, tmp_path = tempfile.mkstemp(
+                    prefix=".catalog.", suffix=".tmp", dir=target_dir
+                )
+                with os.fdopen(fd, 'w') as f:
+                    json.dump(self.catalog, f, indent=2)
+                    f.flush()
+                    # fsync before rename: without this, a kernel panic after
+                    # os.replace can leave the new file referencing unflushed blocks
+                    os.fsync(f.fileno())
+                os.replace(tmp_path, self.data_file)
+                tmp_path = None
+                logger.info(f"Catalog saved to {self.data_file}")
+            except Exception as e:
+                logger.error(f"Failed to save catalog: {e}")
+            finally:
+                if tmp_path is not None:
+                    try:
+                        os.unlink(tmp_path)
+                    except OSError:
+                        pass
 
     def update_service_in_catalog(self, service_id, rest_endpoint, mqtt_topic=None):
         for service in self.catalog.get("servicesList", []):
@@ -198,14 +233,21 @@ class DeviceManager:
         self._save_catalog()
         return True
 
-    def get_sectors(self):
-        return self.catalog.get("sectorsList", [])
+    def remove_service_from_catalog(self, service_id):
+        candidate_ids = {service_id}
+        parts = service_id.split("_")
+        if len(parts) >= 3:
+            candidate_ids.add("_".join(parts[:-2]))
 
-    def get_sector(self, sector_id):
-        for sector in self.catalog.get("sectorsList", []):
-            if sector.get("sectorID") == sector_id:
-                return sector
-        return None
+        original_count = len(self.catalog.get("servicesList", []))
+        self.catalog["servicesList"] = [
+            service for service in self.catalog.get("servicesList", [])
+            if service.get("serviceID") not in candidate_ids
+        ]
+        if len(self.catalog["servicesList"]) != original_count:
+            self._save_catalog()
+            return True
+        return False
 
     @staticmethod
     def generate_device_ids(pipeline_id: str) -> tuple:
@@ -246,7 +288,8 @@ class DeviceManager:
             "last_pressure": None
         }
 
-        self.devices["pipelines"][pipeline_id]["bolts"].append(bolt_id)
+        if bolt_id not in self.devices["pipelines"][pipeline_id]["bolts"]:
+            self.devices["pipelines"][pipeline_id]["bolts"].append(bolt_id)
         logger.info(f"Bolt registered: {bolt_id} on pipeline {pipeline_id}")
         self._save_catalog()
         return bolt_id
@@ -268,18 +311,11 @@ class DeviceManager:
             "last_command_time": None
         }
 
-        self.devices["pipelines"][pipeline_id]["valves"].append(valve_id)
+        if valve_id not in self.devices["pipelines"][pipeline_id]["valves"]:
+            self.devices["pipelines"][pipeline_id]["valves"].append(valve_id)
         logger.info(f"Valve registered: {valve_id} on pipeline {pipeline_id}")
         self._save_catalog()
         return valve_id
-
-    def update_device_status(self, device_type, device_id, status):
-        if device_type in self.devices and device_id in self.devices[device_type]:
-            self.devices[device_type][device_id]["status"] = status
-            self.devices[device_type][device_id]["last_update"] = time.time()
-            self._save_catalog()
-            return True
-        return False
 
     def update_bolt_data(self, bolt_id, temperature=None, pressure=None):
         if bolt_id in self.devices["bolts"]:
@@ -303,11 +339,6 @@ class DeviceManager:
             return True
         return False
 
-    def get_device(self, device_type, device_id):
-        if device_type in self.devices:
-            return self.devices[device_type].get(device_id)
-        return None
-
     def get_all_devices(self, device_type=None):
         if device_type:
             return self.devices.get(device_type, {})
@@ -325,31 +356,11 @@ class DeviceManager:
         }
         return result
 
-    def remove_device(self, device_type, device_id):
-        if device_type in self.devices and device_id in self.devices[device_type]:
-            device = self.devices[device_type].pop(device_id)
-
-            if device_type == "bolts" and "pipeline_id" in device:
-                pipeline_id = device["pipeline_id"]
-                if pipeline_id in self.devices["pipelines"]:
-                    self.devices["pipelines"][pipeline_id]["bolts"].remove(device_id)
-
-            elif device_type == "valves" and "pipeline_id" in device:
-                pipeline_id = device["pipeline_id"]
-                if pipeline_id in self.devices["pipelines"]:
-                    self.devices["pipelines"][pipeline_id]["valves"].remove(device_id)
-
-            logger.info(f"Device removed: {device_type}/{device_id}")
-            self._save_catalog()
-            return True
-        return False
-
     def create_pipeline_bundle(self, pipeline_id, name="", location="", description="", sensor_limits=None, sector_id=""):
         if pipeline_id in self.devices["pipelines"]:
             logger.warning(f"Pipeline bundle {pipeline_id} already exists")
             return None
 
-        # not sure about the sensor_limits defaults
         sensor_limits = sensor_limits or {
             "temp_min": 20.0, "temp_max": 50.0,
             "pressure_min": 80.0, "pressure_max": 120.0
@@ -465,19 +476,3 @@ class DeviceManager:
             if bundle:
                 bundles[pipeline_id] = bundle
         return bundles
-
-    def validate_pipeline_bundle(self, pipeline_id):
-        bundle = self.get_pipeline_bundle(pipeline_id)
-        if not bundle:
-            return False, "Pipeline not found"
-
-        actual_bolts = len(bundle["bolts"])
-        actual_valves = len(bundle["valves"])
-
-        if actual_bolts < 1:
-            return False, f"Pipeline requires at least 1 bolt, found {actual_bolts}"
-
-        if actual_valves < 1:
-            return False, f"Pipeline requires at least 1 valve, found {actual_valves}"
-
-        return True, "Pipeline bundle is valid"
