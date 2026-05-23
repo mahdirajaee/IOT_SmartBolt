@@ -14,10 +14,14 @@ from analytics_engine import AnalyticsEngine
 from mqtt_publisher import MQTTPublisher
 from catalog_client import CatalogClient
 from anomaly_detector import AnomalyDetector, Thresholds
+from banner import print_alert
 
 load_dotenv()
 
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logging.basicConfig(
+    level=getattr(logging, os.environ["LOG_LEVEL"]),
+    format='%(asctime)s - %(levelname)s - %(message)s'
+)
 logger = logging.getLogger(__name__)
 
 # ostad gofte k bayad rate limiting ezafe konim
@@ -27,51 +31,56 @@ class AnalyticsWebService(object):
     exposed = True
 
     def __init__(self):
-        self.timeseries_url = os.getenv("TIMESERIES_DB_URL", "http://localhost:8082")
-        self.catalog_url = os.getenv("CATALOG_URL", "http://localhost:8081")
-        self.mqtt_broker = os.getenv("MQTT_BROKER", "localhost")
-        self.mqtt_port = int(os.getenv("MQTT_PORT", 1883))
+        self.timeseries_url = os.environ["TIMESERIES_DB_URL"]
+        self.catalog_url = os.environ["CATALOG_URL"]
+        self.mqtt_broker = os.environ["MQTT_BROKER"]
+        self.mqtt_port = int(os.environ["MQTT_PORT"])
 
         # cache baraye in k har bar az db nakhoonim
         self.cache = {}
-        self.cache_ttl = int(os.getenv("ANALYSIS_CACHE_TTL", 300))  # 5 min default
-        self.max_data_points = int(os.getenv("MAX_DATA_POINTS", 1000))
-        
+        self.cache_ttl = int(os.environ["ANALYSIS_CACHE_TTL"])
+        self.max_data_points = int(os.environ["MAX_DATA_POINTS"])
+        self.trend_data_points = int(os.environ["TREND_DATA_POINTS"])
+        self.risk_data_points = int(os.environ["RISK_DATA_POINTS"])
+        self.prediction_data_points = int(os.environ["PREDICTION_DATA_POINTS"])
+        self.anomaly_window = int(os.environ["ANOMALY_WINDOW"])
+        self.timeseries_timeout = int(os.environ["TIMESERIES_FETCH_TIMEOUT"])
+
         self.analytics_engine = AnalyticsEngine()
         self.catalog_client = CatalogClient(self.catalog_url)
         self.mqtt_publisher = MQTTPublisher(self.mqtt_broker, self.mqtt_port, catalog_client=self.catalog_client)
 
         self.thresholds = {
             "temperature": {
-                "alert": float(os.getenv("ALERT_THRESHOLD_TEMP", 45.0)),
-                "critical": float(os.getenv("CRITICAL_THRESHOLD_TEMP", 60.0))
+                "alert": float(os.environ["ALERT_THRESHOLD_TEMP"]),
+                "critical": float(os.environ["CRITICAL_THRESHOLD_TEMP"])
             },
             "pressure": {
-                "alert": float(os.getenv("ALERT_THRESHOLD_PRESSURE", 120.0)),
-                "critical": float(os.getenv("CRITICAL_THRESHOLD_PRESSURE", 150.0))
+                "alert": float(os.environ["ALERT_THRESHOLD_PRESSURE"]),
+                "critical": float(os.environ["CRITICAL_THRESHOLD_PRESSURE"])
             }
         }
 
         self.anomaly_detector = AnomalyDetector(thresholds=Thresholds(
-            temp_min=float(os.getenv("TEMP_MIN", 20.0)),
-            temp_normal_min=float(os.getenv("TEMP_NORMAL_MIN", 25.0)),
-            temp_normal_max=float(os.getenv("TEMP_NORMAL_MAX", 40.0)),
+            temp_min=float(os.environ["TEMP_MIN"]),
+            temp_normal_min=float(os.environ["TEMP_NORMAL_MIN"]),
+            temp_normal_max=float(os.environ["TEMP_NORMAL_MAX"]),
             temp_max=self.thresholds["temperature"]["alert"],
             temp_critical=self.thresholds["temperature"]["critical"],
-            pressure_min=float(os.getenv("PRESSURE_MIN", 60.0)),
-            pressure_normal_min=float(os.getenv("PRESSURE_NORMAL_MIN", 90.0)),
-            pressure_normal_max=float(os.getenv("PRESSURE_NORMAL_MAX", 110.0)),
+            pressure_min=float(os.environ["PRESSURE_MIN"]),
+            pressure_normal_min=float(os.environ["PRESSURE_NORMAL_MIN"]),
+            pressure_normal_max=float(os.environ["PRESSURE_NORMAL_MAX"]),
             pressure_max=self.thresholds["pressure"]["alert"],
             pressure_critical=self.thresholds["pressure"]["critical"],
-            rapid_change_temp=float(os.getenv("RAPID_CHANGE_TEMP", 10.0)),
-            rapid_change_pressure=float(os.getenv("RAPID_CHANGE_PRESSURE", 20.0))
+            rapid_change_temp=float(os.environ["RAPID_CHANGE_TEMP"]),
+            rapid_change_pressure=float(os.environ["RAPID_CHANGE_PRESSURE"])
         ))
 
         self.alert_history = []
-        self.max_alert_history = int(os.getenv("MAX_ALERT_HISTORY", 100))
+        self.max_alert_history = int(os.environ["MAX_ALERT_HISTORY"])
         self.alert_lock = threading.Lock()  # thread safety
 
-        self.mqtt_subscriber = MyMQTT("analytics-subscriber", self.mqtt_broker, self.mqtt_port, self)
+        self.mqtt_subscriber = MyMQTT(os.environ["MQTT_CLIENT_ID"], self.mqtt_broker, self.mqtt_port, self)
         self.mqtt_connected = False
         self.monitoring_enabled = True
         self.monitoring_interval = 0
@@ -81,11 +90,16 @@ class AnalyticsWebService(object):
     def _initialize_service(self):
         # inja hame chiz ro setup mikonim - mqtt, catalog, etc
         try:
-            if self.catalog_client.register_service(
-                host=os.getenv("SERVICE_HOST", "localhost"),
-                port=int(os.getenv("CHERRYPY_PORT", 8083))
-            ):
+            am_host = os.environ["SERVICE_HOST"]
+            am_port = int(os.environ["CHERRYPY_PORT"])
+            if self.catalog_client.register_service(host=am_host, port=am_port):
                 logger.info("Successfully registered with Catalog")
+
+                self.catalog_client.start_heartbeat(
+                    host=am_host,
+                    port=am_port,
+                    interval=int(os.environ["CATALOG_HEARTBEAT_INTERVAL"]),
+                )
 
                 # threshold ha ro az catalog begirim
                 fetched_thresholds = self.catalog_client.get_thresholds()
@@ -159,7 +173,7 @@ class AnalyticsWebService(object):
             if device_id.startswith("bolt_"):
                 if device_id not in bolts:
                     bolts[device_id] = {}
-                bolts[device_id][field] = entry.get("v", entry.get("vb", entry.get("vs")))
+                bolts[device_id][field] = entry.get("v")
 
         return pipeline_id, sector_id, bt, bolts
 
@@ -210,6 +224,17 @@ class AnalyticsWebService(object):
                 self.alert_history = self.alert_history[:self.max_alert_history]
             logger.info(f"Alert stored: {alert_data.get('anomaly_type', 'unknown')} - {alert_data.get('pipeline_id')} ({alert_data.get('sensor_type', 'unknown')})")
 
+        sensor_type = alert_data.get("sensor_type", "?")
+        severity = alert_data.get("severity", "warning")
+        threshold_key = "critical" if severity == "critical" else "alert"
+        print_alert(
+            severity=severity,
+            pipeline_id=alert_data.get("pipeline_id", "?"),
+            sensor=sensor_type,
+            value=alert_data.get("value", 0.0),
+            threshold=self.thresholds.get(sensor_type, {}).get(threshold_key),
+        )
+
         pipeline_id = alert_data.get("pipeline_id", "unknown")
         try:
             sector_id = alert_data.get("sector_id", "sector-unknown")
@@ -222,6 +247,7 @@ class AnalyticsWebService(object):
                 "alert_type": alert_data.get("anomaly_type"),
                 "anomaly_type": alert_data.get("anomaly_type"),
                 "severity": alert_data.get("severity"),
+                "sensor_type": alert_data.get("sensor_type"),
                 "message": alert_data.get("message", ""),
                 "description": alert_data.get("message", ""),
                 "temperature": alert_data.get("value") if alert_data.get("sensor_type") == "temperature" else None,
@@ -262,7 +288,7 @@ class AnalyticsWebService(object):
     def fetch_timeseries_data(self, endpoint, params=None):
         try:
             url = f"{self.timeseries_url}/{endpoint}"
-            response = requests.get(url, params=params or {}, timeout=10)
+            response = requests.get(url, params=params or {}, timeout=self.timeseries_timeout)
             if response.status_code == 200:
                 return response.json().get('data', [])
             return []
@@ -275,10 +301,10 @@ class AnalyticsWebService(object):
 
         def fetch():
             temp_data = self.fetch_timeseries_data("temperature", {
-                "pipeline_id": pipeline_id, "bolt_id": bolt_id, "limit": 100
+                "pipeline_id": pipeline_id, "bolt_id": bolt_id, "limit": self.trend_data_points
             })
             pressure_data = self.fetch_timeseries_data("pressure", {
-                "pipeline_id": pipeline_id, "bolt_id": bolt_id, "limit": 100
+                "pipeline_id": pipeline_id, "bolt_id": bolt_id, "limit": self.trend_data_points
             })
             return {
                 "temperature_trend": self.analytics_engine.calculate_trend(temp_data, "temperature"),
@@ -307,7 +333,7 @@ class AnalyticsWebService(object):
 
             anomaly_results = []
             if temp_values and pressure_values:
-                for i, (temp, pressure) in enumerate(zip(temp_values[-10:], pressure_values[-10:])):
+                for i, (temp, pressure) in enumerate(zip(temp_values[:self.anomaly_window], pressure_values[:self.anomaly_window])):
                     result = self.anomaly_detector.detect_anomaly(pipeline_id, bolt_id, temp, pressure)
                     if result.is_anomaly:
                         anomaly_results.append({
@@ -350,7 +376,7 @@ class AnalyticsWebService(object):
             sector_id = pipeline_data.get("sector_id", "sector-unknown")
 
             data = self.fetch_timeseries_data(sensor_type, {
-                "pipeline_id": pipeline_id, "bolt_id": bolt_id, "limit": 100
+                "pipeline_id": pipeline_id, "bolt_id": bolt_id, "limit": self.prediction_data_points
             })
             values = [point.get(sensor_type, 0) for point in data]
             prediction = self.analytics_engine.predict_next_values(values)
@@ -362,7 +388,7 @@ class AnalyticsWebService(object):
             )
             return {
                 "sensor_type": sensor_type,
-                "current_values": values[-10:] if len(values) > 10 else values,
+                "current_values": values[-self.anomaly_window:] if len(values) > self.anomaly_window else values,
                 "prediction": prediction,
                 "alert_generated": alert is not None
             }
@@ -405,10 +431,10 @@ class AnalyticsWebService(object):
                     sector_id = pipeline_data.get("sector_id", "sector-unknown")
 
                     temp_data = self.fetch_timeseries_data("temperature", {
-                        "pipeline_id": pipeline_id, "bolt_id": bolt_id, "limit": 200
+                        "pipeline_id": pipeline_id, "bolt_id": bolt_id, "limit": self.risk_data_points
                     })
                     pressure_data = self.fetch_timeseries_data("pressure", {
-                        "pipeline_id": pipeline_id, "bolt_id": bolt_id, "limit": 200
+                        "pipeline_id": pipeline_id, "bolt_id": bolt_id, "limit": self.risk_data_points
                     })
 
                     temp_values = [point.get("temperature", 0) for point in temp_data]
@@ -606,8 +632,8 @@ class AnalyticsWebService(object):
     
 def main():
     logger.info("starting analytics service...")
-    port = int(os.getenv("CHERRYPY_PORT", 8083))
-    host = os.getenv("CHERRYPY_HOST", "0.0.0.0")
+    port = int(os.environ["CHERRYPY_PORT"])
+    host = os.environ["CHERRYPY_HOST"]
 
     cherrypy.config.update({
         'server.socket_host': host,
@@ -621,9 +647,9 @@ def main():
             'tools.response_headers.on': True,
             'tools.response_headers.headers': [
                 ('Content-Type', 'application/json'),
-                ('Access-Control-Allow-Origin', '*'),
-                ('Access-Control-Allow-Methods', 'GET, POST'),
-                ('Access-Control-Allow-Headers', 'Content-Type')
+                ('Access-Control-Allow-Origin', os.environ["CORS_ALLOW_ORIGIN"]),
+                ('Access-Control-Allow-Methods', os.environ["CORS_ALLOW_METHODS"]),
+                ('Access-Control-Allow-Headers', os.environ["CORS_ALLOW_HEADERS"])
             ]
         }
     }

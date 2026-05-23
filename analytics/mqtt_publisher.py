@@ -68,16 +68,19 @@ class MQTTPublisher:
         return alert
 
     def publish_risk_alert(self, pipeline_id, bolt_id, risk_data, sector_id="sector-unknown"):
+        risk_level = risk_data.get("risk_level", "unknown")
+        severity = "critical" if risk_level == "critical" else "high"
         alert = {
             "alert_type": "risk_assessment",
             "sector_id": sector_id,
             "pipeline_id": pipeline_id,
             "bolt_id": bolt_id,
             "timestamp": time.time(),
+            "severity": severity,
             "risk_score": risk_data.get("risk_score", 0),
-            "risk_level": risk_data.get("risk_level", "unknown"),
+            "risk_level": risk_level,
             "risk_factors": risk_data.get("risk_factors", []),
-            "message": f"Risk level: {risk_data.get('risk_level')} (score: {risk_data.get('risk_score')})"
+            "message": f"Risk level: {risk_level} (score: {risk_data.get('risk_score')})"
         }
         self.queue_alert(alert)
         return alert
@@ -89,9 +92,14 @@ class MQTTPublisher:
 
         max_predicted = max(predictions)
         if threshold is None:
-            threshold = float(os.getenv("ALERT_THRESHOLD_TEMP", 45.0)) if sensor_type == "temperature" else float(os.getenv("ALERT_THRESHOLD_PRESSURE", 120.0))
+            threshold = float(os.environ["ALERT_THRESHOLD_TEMP"]) if sensor_type == "temperature" else float(os.environ["ALERT_THRESHOLD_PRESSURE"])
+        critical_threshold = (
+            float(os.environ["CRITICAL_THRESHOLD_TEMP"]) if sensor_type == "temperature"
+            else float(os.environ["CRITICAL_THRESHOLD_PRESSURE"])
+        )
 
         if max_predicted > threshold:
+            severity = "critical" if max_predicted > critical_threshold else "high"
             alert = {
                 "alert_type": "prediction_warning",
                 "sector_id": sector_id,
@@ -99,9 +107,11 @@ class MQTTPublisher:
                 "bolt_id": bolt_id,
                 "sensor_type": sensor_type,
                 "timestamp": time.time(),
+                "severity": severity,
                 "predicted_values": predictions,
                 "max_predicted": max_predicted,
                 "threshold": threshold,
+                "critical_threshold": critical_threshold,
                 "prediction_method": prediction_data.get("method", "unknown"),
                 "confidence": prediction_data.get("confidence", 0),
                 "message": f"Predicted {sensor_type} may exceed threshold: {max_predicted} > {threshold}"
