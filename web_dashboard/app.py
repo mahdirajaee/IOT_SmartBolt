@@ -3,13 +3,13 @@ from dash import Dash, html, dcc, Input, Output, State
 from dash.exceptions import PreventUpdate
 import dash_bootstrap_components as dbc
 import os
-import sys
 import secrets
+import threading
+import time
 from dotenv import load_dotenv
 import logging
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from common_utils import CatalogClient
+from catalog_client import CatalogClient
 
 load_dotenv()
 
@@ -22,6 +22,7 @@ logger = logging.getLogger(__name__)
 from components.auth import AuthManager
 from components.service_client import ServiceClient
 from components.layouts import create_navbar, create_login_layout
+from components.terminal_banner import print_banner
 
 from pages import landing, overview, pipelines, alerts, analytics, control, users, pipeline_management
 
@@ -239,12 +240,51 @@ if __name__ == '__main__':
 
     catalog_url = os.getenv("CATALOG_URL", "http://localhost:8081")
     catalog_client = CatalogClient(catalog_url)
-    catalog_client.register_service(
+    ok = catalog_client.register_service(
         name="web_dashboard",
         host=host,
         port=port,
         health_endpoint="/health",
         description="Visual monitoring interface"
     )
+    if ok:
+        print_banner(
+            "REGISTERED WITH CATALOG",
+            [
+                f"service:  web_dashboard",
+                f"address:  http://{host}:{port}",
+                f"catalog:  {catalog_url}",
+                f"id:       {catalog_client.service_id}",
+            ],
+            kind="info",
+        )
+
+        heartbeat_interval = int(os.getenv("CATALOG_HEARTBEAT_INTERVAL", 30))
+
+        def _catalog_heartbeat():
+            tick = 0
+            while True:
+                time.sleep(heartbeat_interval)
+                tick += 1
+                if catalog_client.register_service(
+                    name="web_dashboard",
+                    host=host,
+                    port=port,
+                    health_endpoint="/health",
+                    description="Visual monitoring interface",
+                ):
+                    print_banner(
+                        "CATALOG HEARTBEAT",
+                        [
+                            f"service:  web_dashboard",
+                            f"address:  http://{host}:{port}",
+                            f"catalog:  {catalog_url}",
+                            f"id:       {catalog_client.service_id}",
+                            f"tick:     {tick}",
+                        ],
+                        kind="event",
+                    )
+
+        threading.Thread(target=_catalog_heartbeat, daemon=True, name="catalog-heartbeat").start()
 
     app.run(debug=debug, host=host, port=port)

@@ -4,6 +4,7 @@ import dash_bootstrap_components as dbc
 import json
 from typing import Dict, List
 from datetime import datetime
+from components.terminal_banner import print_banner
 
 
 
@@ -373,8 +374,29 @@ def register_callbacks(app, service_client):
             result = service_client.create_user(auth_data['token'], user_data)
 
             if 'error' in result:
+                print_banner(
+                    "USER CREATE FAILED",
+                    [
+                        f"username: {username}",
+                        f"role:     {role}",
+                        f"by:       {(auth_data.get('user') or {}).get('username', '?')}",
+                        f"reason:   {result['error']}",
+                    ],
+                    kind="danger",
+                )
                 return f"Error creating user: {result['error']}", True, "danger", intervals
 
+            print_banner(
+                "USER CREATED",
+                [
+                    f"username: {user_data.get('username', '?')}",
+                    f"email:    {user_data.get('email', '?')}",
+                    f"role:     {user_data.get('role', '?')}",
+                    f"sector:   {user_data.get('sector_id') or '(none)'}",
+                    f"by:       {(auth_data.get('user') or {}).get('username', '?')}",
+                ],
+                kind="success",
+            )
             return "User created successfully!", True, "success", intervals + 1
 
         else:
@@ -391,8 +413,28 @@ def register_callbacks(app, service_client):
             result = service_client.update_user(auth_data['token'], user_id, updates)
 
             if 'error' in result:
+                print_banner(
+                    "USER UPDATE FAILED",
+                    [
+                        f"id:       {user_id}",
+                        f"by:       {(auth_data.get('user') or {}).get('username', '?')}",
+                        f"reason:   {result['error']}",
+                    ],
+                    kind="danger",
+                )
                 return f"Error updating user: {result['error']}", True, "danger", intervals
 
+            print_banner(
+                "USER UPDATED",
+                [
+                    f"id:       {user_id}",
+                    f"email:    {email}",
+                    f"role:     {role}",
+                    f"sector:   {selected_sector or '(none)'}",
+                    f"by:       {(auth_data.get('user') or {}).get('username', '?')}",
+                ],
+                kind="event",
+            )
             return "User updated successfully!", True, "success", intervals + 1
 
     @app.callback(
@@ -420,7 +462,7 @@ def register_callbacks(app, service_client):
             if user:
                 return True, f"{user.get('username', 'N/A')} ({user.get('email', 'N/A')})", user_id
 
-        return False, "", None
+        raise PreventUpdate
 
     @app.callback(
         [Output('delete-user-modal', 'is_open', allow_duplicate=True),
@@ -435,5 +477,24 @@ def register_callbacks(app, service_client):
         if not confirm_clicks or not user_id or not auth_data or not auth_data.get('token'):
             raise PreventUpdate
 
-        service_client.delete_user(auth_data['token'], user_id)
+        result = service_client.delete_user(auth_data['token'], user_id)
+        if 'error' not in (result or {}):
+            print_banner(
+                "USER DELETED",
+                [
+                    f"id:       {user_id}",
+                    f"by:       {(auth_data.get('user') or {}).get('username', '?')}",
+                ],
+                kind="event",
+            )
+        else:
+            print_banner(
+                "USER DELETE FAILED",
+                [
+                    f"id:       {user_id}",
+                    f"by:       {(auth_data.get('user') or {}).get('username', '?')}",
+                    f"reason:   {(result or {}).get('error', 'unknown')}",
+                ],
+                kind="danger",
+            )
         return False, intervals + 1

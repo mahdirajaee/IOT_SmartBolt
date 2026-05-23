@@ -5,6 +5,7 @@ import json
 from typing import Dict, List
 from datetime import datetime
 from components.layouts import format_timestamp
+from components.terminal_banner import print_banner
 
 
 
@@ -152,59 +153,10 @@ def create_layout(service_client):
 
                     dbc.Row([
                         dbc.Col([
-                            html.H6("Sensor Limits", className="mb-2"),
-                        ])
-                    ], className="mb-2"),
-
-                    dbc.Row([
-                        dbc.Col([
-                            dbc.Label("Temperature Min (°C)"),
-                            dbc.Input(
-                                id="temp-min-input",
-                                type="number",
-                                value=20.0,
-                                step=0.1
-                            )
-                        ], width=3),
-                        dbc.Col([
-                            dbc.Label("Temperature Max (°C)"),
-                            dbc.Input(
-                                id="temp-max-input",
-                                type="number",
-                                value=50.0,
-                                step=0.1
-                            )
-                        ], width=3),
-                        dbc.Col([
-                            dbc.Label("Pressure Min (PSI)"),
-                            dbc.Input(
-                                id="pressure-min-input",
-                                type="number",
-                                value=80.0,
-                                step=0.1
-                            )
-                        ], width=3),
-                        dbc.Col([
-                            dbc.Label("Pressure Max (PSI)"),
-                            dbc.Input(
-                                id="pressure-max-input",
-                                type="number",
-                                value=120.0,
-                                step=0.1
-                            )
-                        ], width=3)
-                    ], className="mb-3"),
-
-                    dbc.Row([
-                        dbc.Col([
                             dbc.Card([
                                 dbc.CardBody([
                                     html.H6("Auto-Created Components", className="text-muted mb-2"),
-                                    html.Ul([
-                                        html.Li("1 Temperature/Pressure Sensor (main bolt)"),
-                                        html.Li("1 Main Control Valve"),
-                                        html.Li("Default sensor limits and configurations")
-                                    ])
+                                    html.Div(id="auto-component-preview")
                                 ])
                             ], color="light", className="mb-3")
                         ])
@@ -260,6 +212,20 @@ def create_layout(service_client):
         dcc.Store(id='pipeline-modal-mode', data='create')
 
     ], fluid=True)
+
+
+def build_components_preview(pipeline_id):
+    if not pipeline_id:
+        return html.P(
+            "Enter a Pipeline ID above to preview the auto-created components.",
+            className="text-muted mb-0 fst-italic"
+        )
+
+    pid = pipeline_id.strip().lower()
+    bolt_id = f"bolt_{pid}"
+    valve_id = f"valve_{pid}"
+
+    return html.P(f"Will create: {bolt_id} (sensor) and {valve_id} (valve).", className="mb-0")
 
 
 def create_pipeline_bundles_table(bundles):
@@ -378,10 +344,6 @@ def register_callbacks(app, service_client):
          Output('pipeline-sector-input', 'value'),
          Output('pipeline-location-input', 'value'),
          Output('pipeline-description-input', 'value'),
-         Output('temp-min-input', 'value'),
-         Output('temp-max-input', 'value'),
-         Output('pressure-min-input', 'value'),
-         Output('pressure-max-input', 'value'),
          Output('pipeline-id-input', 'disabled'),
          Output('pipeline-modal-save', 'children')],
         [Input('create-pipeline-button', 'n_clicks'),
@@ -396,16 +358,15 @@ def register_callbacks(app, service_client):
         trigger = ctx.triggered[0]['prop_id']
 
         if 'pipeline-modal-cancel' in trigger:
-            return False, "", "create", None, "", "", None, "", "", 20.0, 50.0, 80.0, 120.0, False, "Create Pipeline"
+            return False, "", "create", None, "", "", None, "", "", False, "Create Pipeline"
 
         if 'create-pipeline-button' in trigger and create_clicks:
-            return True, "Create New Pipeline Bundle", "create", None, "", "", None, "", "", 20.0, 50.0, 80.0, 120.0, False, "Create Pipeline"
+            return True, "Create New Pipeline Bundle", "create", None, "", "", None, "", "", False, "Create Pipeline"
 
         if 'edit-pipeline-btn' in trigger and any(edit_clicks):
             pipeline_id = json.loads(trigger.split('.')[0])['index']
             bundle = bundles.get(pipeline_id, {})
             pipeline = bundle.get('pipeline', {})
-            sensor_limits = pipeline.get('sensor_limits', {})
 
             return (
                 True,
@@ -417,10 +378,6 @@ def register_callbacks(app, service_client):
                 pipeline.get('sector_id', None),
                 pipeline.get('location', ''),
                 pipeline.get('description', ''),
-                sensor_limits.get('temp_min', 20.0),
-                sensor_limits.get('temp_max', 50.0),
-                sensor_limits.get('pressure_min', 80.0),
-                sensor_limits.get('pressure_max', 120.0),
                 True,
                 "Save Changes"
             )
@@ -441,17 +398,12 @@ def register_callbacks(app, service_client):
          State('pipeline-sector-input', 'value'),
          State('pipeline-location-input', 'value'),
          State('pipeline-description-input', 'value'),
-         State('temp-min-input', 'value'),
-         State('temp-max-input', 'value'),
-         State('pressure-min-input', 'value'),
-         State('pressure-max-input', 'value'),
          State('auth-store', 'data'),
          State('pipeline-bundles-interval', 'n_intervals')],
         prevent_initial_call=True
     )
     def save_pipeline_bundle(save_clicks, mode, current_id, pipeline_id, name, sector_id, location,
-                           description, temp_min, temp_max, pressure_min, pressure_max,
-                           auth_data, intervals):
+                           description, auth_data, intervals):
         if not save_clicks or not auth_data or not auth_data.get('token'):
             raise PreventUpdate
 
@@ -467,20 +419,34 @@ def register_callbacks(app, service_client):
                 'name': name or '',
                 'sector_id': sector_id,
                 'location': location or '',
-                'description': description or '',
-                'sensor_limits': {
-                    'temp_min': temp_min or 20.0,
-                    'temp_max': temp_max or 50.0,
-                    'pressure_min': pressure_min or 80.0,
-                    'pressure_max': pressure_max or 120.0
-                }
+                'description': description or ''
             }
 
             result = service_client.create_pipeline_bundle(auth_data['token'], bundle_data)
 
             if 'error' in result:
+                print_banner(
+                    "PIPELINE CREATE FAILED",
+                    [
+                        f"id:       {pipeline_id}",
+                        f"sector:   {sector_id}",
+                        f"by:       {(auth_data.get('user') or {}).get('username', '?')}",
+                        f"reason:   {result['error']}",
+                    ],
+                    kind="danger",
+                )
                 return True, f"Error creating pipeline bundle: {result['error']}", True, "danger", intervals
 
+            print_banner(
+                "PIPELINE CREATED",
+                [
+                    f"id:       {bundle_data.get('pipeline_id', '?')}",
+                    f"sector:   {bundle_data.get('sector_id', '?')}",
+                    f"name:     {bundle_data.get('name') or '(unnamed)'}",
+                    f"by:       {(auth_data.get('user') or {}).get('username', '?')}",
+                ],
+                kind="success",
+            )
             return False, "", False, "success", intervals + 1
 
         else:
@@ -488,20 +454,33 @@ def register_callbacks(app, service_client):
                 'name': name or '',
                 'sector_id': sector_id,
                 'location': location or '',
-                'description': description or '',
-                'sensor_limits': {
-                    'temp_min': temp_min or 20.0,
-                    'temp_max': temp_max or 50.0,
-                    'pressure_min': pressure_min or 80.0,
-                    'pressure_max': pressure_max or 120.0
-                }
+                'description': description or ''
             }
 
             result = service_client.update_pipeline_bundle(auth_data['token'], current_id, updates)
 
             if 'error' in result:
+                print_banner(
+                    "PIPELINE UPDATE FAILED",
+                    [
+                        f"id:       {current_id}",
+                        f"by:       {(auth_data.get('user') or {}).get('username', '?')}",
+                        f"reason:   {result['error']}",
+                    ],
+                    kind="danger",
+                )
                 return True, f"Error updating pipeline bundle: {result['error']}", True, "danger", intervals
 
+            print_banner(
+                "PIPELINE UPDATED",
+                [
+                    f"id:       {current_id}",
+                    f"sector:   {sector_id}",
+                    f"name:     {(name or '').strip() or '(unnamed)'}",
+                    f"by:       {(auth_data.get('user') or {}).get('username', '?')}",
+                ],
+                kind="event",
+            )
             return False, "", False, "success", intervals + 1
 
     @app.callback(
@@ -561,5 +540,31 @@ def register_callbacks(app, service_client):
         if not confirm_clicks or not pipeline_id or not auth_data or not auth_data.get('token'):
             raise PreventUpdate
 
-        service_client.delete_pipeline_bundle(auth_data['token'], pipeline_id)
+        result = service_client.delete_pipeline_bundle(auth_data['token'], pipeline_id)
+        if 'error' not in (result or {}):
+            print_banner(
+                "PIPELINE DELETED",
+                [
+                    f"id:       {pipeline_id}",
+                    f"by:       {(auth_data.get('user') or {}).get('username', '?')}",
+                ],
+                kind="event",
+            )
+        else:
+            print_banner(
+                "PIPELINE DELETE FAILED",
+                [
+                    f"id:       {pipeline_id}",
+                    f"by:       {(auth_data.get('user') or {}).get('username', '?')}",
+                    f"reason:   {(result or {}).get('error', 'unknown')}",
+                ],
+                kind="danger",
+            )
         return False, intervals + 1
+
+    @app.callback(
+        Output('auto-component-preview', 'children'),
+        Input('pipeline-id-input', 'value')
+    )
+    def update_components_preview(pipeline_id):
+        return build_components_preview(pipeline_id)
