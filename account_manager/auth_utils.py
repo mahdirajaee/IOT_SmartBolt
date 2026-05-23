@@ -1,7 +1,6 @@
 import jwt
 import bcrypt
 import hashlib
-import secrets
 from datetime import datetime, timedelta, timezone
 import os
 from dotenv import load_dotenv
@@ -9,20 +8,18 @@ import logging
 
 load_dotenv()
 
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logging.basicConfig(
+    level=getattr(logging, os.environ['LOG_LEVEL']),
+    format='%(asctime)s - %(levelname)s - %(message)s'
+)
 logger = logging.getLogger(__name__)
 
 class AuthManager:
     def __init__(self):
-        configured_key = os.getenv('JWT_SECRET_KEY')
-        if not configured_key or configured_key == 'default-secret-key':
-            self.secret_key = secrets.token_hex(32)
-            logger.warning("JWT_SECRET_KEY not configured - using random secret. Tokens will not survive restarts.")
-        else:
-            self.secret_key = configured_key
-        self.algorithm = os.getenv('JWT_ALGORITHM', 'HS256')
-        self.expiry_hours = int(os.getenv('JWT_EXPIRY_HOURS', 24))
-        self.bcrypt_rounds = int(os.getenv('BCRYPT_ROUNDS', 12))
+        self.secret_key = os.environ['JWT_SECRET_KEY']
+        self.algorithm = os.environ['JWT_ALGORITHM']
+        self.expiry_hours = int(os.environ['JWT_EXPIRY_HOURS'])
+        self.bcrypt_rounds = int(os.environ['BCRYPT_ROUNDS'])
     
     def hash_password(self, password):
         password_bytes = password.encode('utf-8')
