@@ -15,10 +15,11 @@ logger = logging.getLogger(__name__)
 
 class MQTTSubscriber:
 
-    def __init__(self, broker="localhost", port=1883):
+    def __init__(self, broker, port):
         self.broker = broker
         self.port = port
-        self.client_id = "timeseries-db-subscriber"
+        self.client_id = os.environ["MQTT_CLIENT_ID"]
+        self.start_wait = int(os.environ["MQTT_START_WAIT"])
 
         self.mqtt = MyMQTT(self.client_id, self.broker, self.port, self, clean_session=False)
 
@@ -109,7 +110,7 @@ class MQTTSubscriber:
     def start(self) -> bool:
         try:
             self.mqtt.start()
-            time.sleep(1)
+            time.sleep(self.start_wait)
 
             self.mqtt.mySubscribe("sectors/+/pipelines/+/measurements")
 

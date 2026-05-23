@@ -1,26 +1,28 @@
 import cherrypy
 import json
 import os
+import sys
 import time
+import platform
+import threading
 import logging
+import requests
 from dotenv import load_dotenv
 from pathlib import Path
 from datetime import datetime, timedelta
 from typing import Any
 
-from mqtt_subscriber import MQTTSubscriber
-from influxdb3_storage import InfluxDB3Storage
 load_dotenv()
 load_dotenv(Path(__file__).resolve().with_name(".env"))
 
-#certificate handling for gRPC on Windows
-# Force gRPC to use the Windows CA bundle that worked with curl.exe
-os.environ["GRPC_DEFAULT_SSL_ROOTS_FILE_PATH"] = r"C:\certs\cacert.pem"
-print(f"[DEBUG] Using CA bundle: {os.environ['GRPC_DEFAULT_SSL_ROOTS_FILE_PATH']}")
-#--------------------------------------------
+from mqtt_subscriber import MQTTSubscriber
+from influxdb3_storage import InfluxDB3Storage
+
+if platform.system() == "Windows":
+    os.environ["GRPC_DEFAULT_SSL_ROOTS_FILE_PATH"] = r"C:\certs\cacert.pem"
 
 logging.basicConfig(
-    level=getattr(logging, os.getenv("LOG_LEVEL", "INFO")),
+    level=getattr(logging, os.environ["LOG_LEVEL"]),
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
@@ -31,14 +33,14 @@ class TimeSeriesDBService(object):
 
     def __init__(self):
         logger.info("starting timeseries service...")
-        self.influx_url = os.getenv("INFLUXDB_URL", "http://localhost:8086")
-        self.influx_token = os.getenv("INFLUXDB_TOKEN", "")
-        self.influx_org = os.getenv("INFLUXDB_ORG", "iot_org")
-        self.influx_bucket_north = os.getenv("INFLUXDB_BUCKET_NORTH", "smartboltbucket-north")
-        self.influx_bucket_south = os.getenv("INFLUXDB_BUCKET_SOUTH", "smartboltbucket-south")
+        self.influx_url = os.environ["INFLUXDB_URL"]
+        self.influx_token = os.environ["INFLUXDB_TOKEN"]
+        self.influx_org = os.environ["INFLUXDB_ORG"]
+        self.influx_bucket_north = os.environ["INFLUXDB_BUCKET_NORTH"]
+        self.influx_bucket_south = os.environ["INFLUXDB_BUCKET_SOUTH"]
 
-        self.mqtt_broker = os.getenv("MQTT_BROKER", "localhost")
-        self.mqtt_port = int(os.getenv("MQTT_PORT", 1883))
+        self.mqtt_broker = os.environ["MQTT_BROKER"]
+        self.mqtt_port = int(os.environ["MQTT_PORT"])
         
         self.storage = None
         self.subscriber = None
@@ -72,40 +74,21 @@ class TimeSeriesDBService(object):
                 logger.info("MQTT subscriber started successfully")
             else:
                 logger.error("Failed to start MQTT subscriber")
-            self._register_with_catalog()
         except Exception as e:
             logger.error(f"Service initialization error: {e}")
-    
-    def _register_with_catalog(self):
-        try:
-            from common_utils import CatalogClient
-            catalog_url = os.getenv("CATALOG_URL", "http://localhost:8081")
-            client = CatalogClient(catalog_url)
-            if client.register_service(
-                name="timeseries_db",
-                host=os.getenv("SERVICE_HOST", "localhost"),
-                port=int(os.getenv("CHERRYPY_PORT", 8082)),
-                description="Time series database connector for IoT data"
-            ):
-                logger.info("Registered with Catalog")
-            else:
-                logger.warning("Could not register with Catalog")
-        except Exception as e:
-            logger.warning(f"Catalog not available: {e}")
 
     def _get_pipeline_ids_from_catalog(self):
         try:
-            import requests
-            catalog_url = os.getenv("CATALOG_URL", "http://localhost:8081")
-            response = requests.get(f"{catalog_url}/pipelines", timeout=5)
+            catalog_url = os.environ["CATALOG_URL"]
+            response = requests.get(f"{catalog_url}/pipelines", timeout=int(os.environ["HTTP_TIMEOUT"]))
             if response.status_code == 200:
                 data = response.json()
                 pipelines = data.get("pipelines", {})
                 return list(pipelines.keys())
         except Exception as e:
             logger.warning(f"Could not fetch pipelines from catalog: {e}")
-        fallback = os.getenv("FALLBACK_PIPELINE_IDS", "N1,N2,N3,S1,S2,S3")
-        return fallback.split(",")
+        fallback = os.environ["FALLBACK_PIPELINE_IDS"]
+        return [pid for pid in fallback.split(",") if pid]
 
     def _handle_storage(self, data_type, data):
         # callback from mqtt subscriber
@@ -264,25 +247,102 @@ class TimeSeriesDBService(object):
         
         logger.info("TimeSeriesDB Service stopped")
 
+
+def _print_banner(title, lines, kind="info"):
+    print(f"\n{'-'*11} {title.lower()}", flush=True)
+    for line in lines or []:
+        print(f"  {line}", flush=True)
+
+
+def _register_timeseries_db_with_catalog(silent=False):
+    catalog_url = os.environ["CATALOG_URL"]
+    name = os.environ["REGISTRATION_NAME"]
+    host = os.environ["SERVICE_HOST"]
+    port = int(os.environ["CHERRYPY_PORT"])
+    payload = {
+        "name": name,
+        "host": host,
+        "port": port,
+        "health_endpoint": "/health",
+        "description": os.environ["SERVICE_DESCRIPTION"],
+    }
+    try:
+        response = requests.post(
+            f"{catalog_url}/services/register",
+            json=payload, timeout=int(os.environ["HTTP_TIMEOUT"]),
+        )
+        if response.status_code == 200:
+            if not silent:
+                _print_banner(
+                    "REGISTERED WITH CATALOG",
+                    [f"service:  {name}",
+                     f"address:  http://{host}:{port}",
+                     f"catalog:  {catalog_url}"],
+                    kind="info",
+                )
+        else:
+            _print_banner(
+                "CATALOG REGISTRATION FAILED",
+                [f"status: {response.status_code}",
+                 f"body: {response.text[:200]}"],
+                kind="warning",
+            )
+    except Exception as e:
+        _print_banner(
+            "CATALOG UNREACHABLE",
+            [catalog_url, f"reason: {e}"],
+            kind="danger",
+        )
+
+
+def _catalog_heartbeat_loop():
+    interval = int(os.environ["CATALOG_HEARTBEAT_INTERVAL"])
+    catalog_url = os.environ["CATALOG_URL"]
+    host = os.environ["SERVICE_HOST"]
+    port = int(os.environ["CHERRYPY_PORT"])
+    name = os.environ["REGISTRATION_NAME"]
+    tick = 0
+    while True:
+        time.sleep(interval)
+        tick += 1
+        _register_timeseries_db_with_catalog(silent=True)
+        _print_banner(
+            "CATALOG HEARTBEAT",
+            [f"service:  {name}",
+             f"address:  http://{host}:{port}",
+             f"catalog:  {catalog_url}",
+             f"tick:     {tick}"],
+            kind="info",
+        )
+
+
+def _start_catalog_heartbeat():
+    threading.Thread(
+        target=_catalog_heartbeat_loop,
+        daemon=True,
+        name="catalog-heartbeat",
+    ).start()
+
+
 def main():
-    port = int(os.getenv("CHERRYPY_PORT", 8082))
-    host = os.getenv("CHERRYPY_HOST", "0.0.0.0")
-    
+    port = int(os.environ["CHERRYPY_PORT"])
+    host = os.environ["CHERRYPY_HOST"]
+
     cherrypy.config.update({
         'server.socket_host': host,
         'server.socket_port': port,
         'engine.autoreload.on': False
     })
-    
+
     app_config = {
         '/': {
             'request.dispatch': cherrypy.dispatch.MethodDispatcher(),
             'tools.response_headers.on': True,
             'tools.response_headers.headers': [
                 ('Content-Type', 'application/json'),
-                ('Access-Control-Allow-Origin', '*'),
-                ('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE'),
-                ('Access-Control-Allow-Headers', 'Content-Type')
+                ('Access-Control-Allow-Origin', os.environ["CORS_ALLOW_ORIGIN"]),
+                ('Access-Control-Allow-Methods', os.environ["CORS_ALLOW_METHODS"]),
+                ('Access-Control-Allow-Headers', os.environ["CORS_ALLOW_HEADERS"]),
             ]
         }
     }
@@ -293,6 +353,8 @@ def main():
     logger.info("Features: MQTT subscription, InfluxDB storage, REST API")
     
     cherrypy.engine.subscribe('stop', service.shutdown)
+    cherrypy.engine.subscribe('start', _register_timeseries_db_with_catalog)
+    cherrypy.engine.subscribe('start', _start_catalog_heartbeat)
     cherrypy.quickstart(service, '/', app_config)
 
 if __name__ == "__main__":

@@ -6,6 +6,7 @@ from influxdb_client_3 import InfluxDBClient3, Point, WritePrecision, WriteOptio
 from urllib.parse import urlparse
 
 from data_models import SensorReading
+from banner import print_event
 
 logger = logging.getLogger(__name__)
 
@@ -40,8 +41,22 @@ class InfluxDB3Storage:
         self.org = org
         self.flight_options = {"disable_server_verification": True} if cleaned_url.startswith("http://") else None
 
-        self.client_north = None
-        self.client_south = None
+        self.client_north = InfluxDBClient3(
+            host=self.url,
+            org=self.org,
+            database=self.bucket_north,
+            token=self.token,
+            write_options=WriteOptions(batch_size=100, flush_interval=5000),
+            flight_client_options=self.flight_options
+        )
+        self.client_south = InfluxDBClient3(
+            host=self.url,
+            org=self.org,
+            database=self.bucket_south,
+            token=self.token,
+            write_options=WriteOptions(batch_size=100, flush_interval=5000),
+            flight_client_options=self.flight_options
+        )
         self.connected = False
 
         self.stats = {
@@ -57,22 +72,6 @@ class InfluxDB3Storage:
 
     def _connect(self) -> bool:
         try:
-            self.client_north = InfluxDBClient3(
-                host=self.url,
-                org=self.org,
-                database=self.bucket_north,
-                token=self.token,
-                write_options=WriteOptions(batch_size=100, flush_interval=5000),
-                flight_client_options=self.flight_options
-            )
-            self.client_south = InfluxDBClient3(
-                host=self.url,
-                org=self.org,
-                database=self.bucket_south,
-                token=self.token,
-                write_options=WriteOptions(batch_size=100, flush_interval=5000),
-                flight_client_options=self.flight_options
-            )
             self._ensure_databases()
             self.connected = True
             logger.info(f"Connected to InfluxDB v3 at {self.url}")
@@ -124,9 +123,20 @@ class InfluxDB3Storage:
 
             self._write_points(points, sector_id)
 
+            if self.connected and points:
+                parts = []
+                if reading.temperature is not None:
+                    parts.append(f"T={reading.temperature:.1f}")
+                if reading.pressure is not None:
+                    parts.append(f"P={reading.pressure:.1f}")
+                print_event('STORED', f"{reading.pipeline_id} {' '.join(parts)} sector={sector_id}", 'green')
+            elif points:
+                print_event('STORE-FAIL', f"{reading.pipeline_id} sector={sector_id} (db error)", 'red')
+
         except Exception as e:
             logger.error(f"Error storing sensor reading: {e}")
             self.stats["points_failed"] += 1
+            print_event('STORE-FAIL', f"{reading.pipeline_id} ({str(e)[:50]})", 'red')
 
     def _write_points(self, points: List[Point], sector_id: str):
         # client handles batching via WriteOptions, just write directly
@@ -179,7 +189,7 @@ class InfluxDB3Storage:
             data = []
             for client in clients_to_query:
                 try:
-                    result = client.query(query)
+                    result: Any = client.query(query)
                     if result:
                         df = result.to_pandas()
                         for _, row in df.iterrows():
@@ -228,7 +238,7 @@ class InfluxDB3Storage:
             bolt_ids = set()
             for client in clients:
                 try:
-                    result = client.query(bolts_query)
+                    result: Any = client.query(bolts_query)
                     if result:
                         df = result.to_pandas()
                         for _, row in df.iterrows():
