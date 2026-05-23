@@ -3,7 +3,10 @@ import os
 from datetime import datetime, timezone
 import logging
 
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logging.basicConfig(
+    level=getattr(logging, os.environ['LOG_LEVEL']),
+    format='%(asctime)s - %(levelname)s - %(message)s'
+)
 logger = logging.getLogger(__name__)
 
 
@@ -26,8 +29,7 @@ class UserRow:
 class DatabaseManager:
 
     def __init__(self, db_path=None):
-        default_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'users.db')
-        self.db_path = db_path or os.getenv('DB_PATH', default_path)
+        self.db_path = db_path or os.environ['DB_PATH']
         self._init_tables()
         logger.info(f"Connected to SQLite database at {self.db_path}")
 

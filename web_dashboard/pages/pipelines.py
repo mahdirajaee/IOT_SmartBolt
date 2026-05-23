@@ -552,6 +552,6 @@ def register_callbacks(app, service_client):
             html.Hr(),
             html.H5("Risk Factors"),
             html.Ul([
-                html.Li(factor) for factor in risk_factors
+                html.Li(factor.get('factor') if isinstance(factor, dict) else factor) for factor in risk_factors
             ]) if risk_factors else html.P("No risk factors detected", className="text-muted")
         ])

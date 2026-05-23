@@ -7,36 +7,36 @@ class ConfigurationManager:
     def __init__(self):
         self.configurations = {
             "global": {
-                "mqtt_broker": os.getenv("DEFAULT_MQTT_BROKER", "localhost"),
-                "mqtt_port": int(os.getenv("DEFAULT_MQTT_PORT", 1883)),
-                "timeseries_db_url": os.getenv("DEFAULT_TIMESERIES_DB_URL", "http://localhost:8082"),
-                "publish_interval": int(os.getenv("PUBLISH_INTERVAL", 5))
+                "mqtt_broker": os.environ["DEFAULT_MQTT_BROKER"],
+                "mqtt_port": int(os.environ["DEFAULT_MQTT_PORT"]),
+                "timeseries_db_url": os.environ["DEFAULT_TIMESERIES_DB_URL"],
+                "publish_interval": int(os.environ["PUBLISH_INTERVAL"])
             },
             "thresholds": {
                 "temperature": {
-                    "min_normal": float(os.getenv("TEMP_MIN_NORMAL", 20.0)),
-                    "max_normal": float(os.getenv("TEMP_MAX_NORMAL", 40.0)),
-                    "alert": float(os.getenv("TEMP_ALERT", 45.0)),
-                    "critical": float(os.getenv("TEMP_CRITICAL", 60.0))
+                    "min_normal": float(os.environ["TEMP_MIN_NORMAL"]),
+                    "max_normal": float(os.environ["TEMP_MAX_NORMAL"]),
+                    "alert": float(os.environ["TEMP_ALERT"]),
+                    "critical": float(os.environ["TEMP_CRITICAL"])
                 },
                 "pressure": {
-                    "min_normal": float(os.getenv("PRESSURE_MIN_NORMAL", 90.0)),
-                    "max_normal": float(os.getenv("PRESSURE_MAX_NORMAL", 110.0)),
-                    "alert": float(os.getenv("PRESSURE_ALERT", 120.0)),
-                    "critical": float(os.getenv("PRESSURE_CRITICAL", 150.0))
+                    "min_normal": float(os.environ["PRESSURE_MIN_NORMAL"]),
+                    "max_normal": float(os.environ["PRESSURE_MAX_NORMAL"]),
+                    "alert": float(os.environ["PRESSURE_ALERT"]),
+                    "critical": float(os.environ["PRESSURE_CRITICAL"])
                 }
             },
             "control_rules": {
                 "auto_shutdown": {
-                    "enabled": os.getenv("AUTO_SHUTDOWN_ENABLED", "true").lower() == "true",
-                    "temperature_threshold": float(os.getenv("TEMP_CRITICAL", 60.0)),
-                    "pressure_threshold": float(os.getenv("PRESSURE_CRITICAL", 150.0)),
+                    "enabled": os.environ["AUTO_SHUTDOWN_ENABLED"].lower() == "true",
+                    "temperature_threshold": float(os.environ["TEMP_CRITICAL"]),
+                    "pressure_threshold": float(os.environ["PRESSURE_CRITICAL"]),
                     "action": "close_valve"
                 },
                 "anomaly_response": {
-                    "enabled": os.getenv("ANOMALY_RESPONSE_ENABLED", "true").lower() == "true",
-                    "consecutive_anomalies": int(os.getenv("CONSECUTIVE_ANOMALIES_THRESHOLD", 3)),
-                    "time_window": int(os.getenv("ANOMALY_TIME_WINDOW", 60)),
+                    "enabled": os.environ["ANOMALY_RESPONSE_ENABLED"].lower() == "true",
+                    "consecutive_anomalies": int(os.environ["CONSECUTIVE_ANOMALIES_THRESHOLD"]),
+                    "time_window": int(os.environ["ANOMALY_TIME_WINDOW"]),
                     "action": "alert"
                 }
             }

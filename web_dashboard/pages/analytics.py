@@ -5,6 +5,30 @@ from datetime import datetime
 import pandas as pd
 import os
 
+
+def _factor_tone(weight):
+    try:
+        w = float(weight or 0)
+    except (TypeError, ValueError):
+        w = 0
+    if w >= 0.3:
+        return "danger"
+    if w >= 0.2:
+        return "warning"
+    return "info"
+
+
+def _trend_visual(trend_label):
+    table = {
+        'rapidly_increasing': ('fas fa-arrow-up', '#dc2626'),
+        'increasing': ('fas fa-arrow-up', '#f97316'),
+        'stable': ('fas fa-equals', '#6b7280'),
+        'decreasing': ('fas fa-arrow-down', '#3b82f6'),
+        'rapidly_decreasing': ('fas fa-arrow-down', '#06b6d4'),
+    }
+    return table.get(trend_label, ('fas fa-circle-question', '#94a3b8'))
+
+
 def create_layout(service_client):
     return dbc.Container([
         html.Div([
@@ -253,75 +277,58 @@ def register_callbacks(app, service_client):
             if bolts:
                 bid = bolts[0].get('bolt_id') if isinstance(bolts[0], dict) else bolts[0]
         stats = service_client.get_statistics(pipeline_id=pipeline_id, bolt_id=bid)
+        trend = service_client.get_trend(pipeline_id, bid)
 
         health = service_client.get_pipeline_health(pipeline_id)
         health_score = health.get('health_score', 0) if health else 0
+        risk_score = health.get('risk_score', 0) if health else 0
         risk_level = health.get('risk_level', 'unknown') if health else 'unknown'
+        risk_factors = health.get('risk_factors', []) if health else []
 
         anomalies = service_client.get_alerts(pipeline_id=pipeline_id, limit=1000)
         anomaly_rate = len(anomalies) / max(hours, 1)
 
+        def _sensor_card(label, gradient, sensor_key, value_fmt):
+            s = stats.get(sensor_key) or {}
+            t = trend.get(sensor_key) or {}
 
-        return dbc.Row([
-            dbc.Col([
+            mean = s.get('mean', 0) or 0
+            sigma = s.get('std_dev', 0) or 0
+            median = s.get('median')
+            iqr = s.get('iqr')
+            p25 = s.get('percentile_25')
+            p75 = s.get('percentile_75')
+
+            trend_label = t.get('trend') or 'insufficient_data'
+            slope = t.get('slope', 0) or 0
+            r2_pct = t.get('confidence', 0) or 0
+            icon_cls, tone = _trend_visual(trend_label)
+
+            children = [
+                html.Div(label, style={'color': '#6b7280', 'fontSize': '0.9rem', 'fontWeight': '600'}),
+                html.H3(value_fmt(mean), style={'marginBottom': '0.25rem', 'color': '#0b1b2d', 'fontWeight': '700'}),
+                html.Small(f"σ = {sigma:.2f}", style={'color': '#94a3b8'}),
+            ]
+
+            if median is not None and iqr is not None and p25 is not None and p75 is not None:
+                children.append(html.Div(
+                    f"median {median:.2f} · IQR {iqr:.2f} (p25 {p25:.1f} – p75 {p75:.1f})",
+                    style={'color': '#94a3b8', 'fontSize': '0.78rem', 'marginTop': '0.4rem'}
+                ))
+
+            if trend_label not in ('insufficient_data', 'undefined'):
+                children.append(html.Div([
+                    html.I(className=f"{icon_cls} me-2", style={'color': tone}),
+                    html.Span(f"trend: {trend_label.replace('_', ' ')}",
+                              style={'color': tone, 'fontWeight': '700', 'fontSize': '0.8rem'}),
+                    html.Span(f"  (slope {slope:+.3f}, R² {r2_pct/100:.2f})",
+                              style={'color': '#94a3b8', 'fontSize': '0.75rem'}),
+                ], style={'marginTop': '0.45rem'}))
+
+            return dbc.Col([
                 html.Div([
-                    html.Div(style={'height': '4px', 'borderRadius': '10px', 'background': 'linear-gradient(90deg, #22d3ee, #38bdf8)'}),
-                    html.Div([
-                        html.Div("Avg Temperature", style={'color': '#6b7280', 'fontSize': '0.9rem', 'fontWeight': '600'}),
-                        html.H3(f"{stats.get('temperature', {}).get('mean', 0):.1f}°C", style={'marginBottom': '0.25rem', 'color': '#0b1b2d', 'fontWeight': '700'}),
-                        html.Small(f"σ = {stats.get('temperature', {}).get('std') or 0:.2f}", style={'color': '#94a3b8'})
-                    ], style={'padding': '1.1rem 1.25rem 1.2rem'})
-                ], style={
-                    'backgroundColor': '#ffffff',
-                    'borderRadius': '14px',
-                    'boxShadow': '0 12px 28px rgba(12,23,42,0.08)',
-                    'border': '1px solid #e6ecf5'
-                })
-            ], md=3),
-            dbc.Col([
-                html.Div([
-                    html.Div(style={'height': '4px', 'borderRadius': '10px', 'background': 'linear-gradient(90deg, #6366f1, #22d3ee)'}),
-                    html.Div([
-                        html.Div("Avg Pressure", style={'color': '#6b7280', 'fontSize': '0.9rem', 'fontWeight': '600'}),
-                        html.H3(f"{stats.get('pressure', {}).get('mean', 0):.1f} PSI", style={'marginBottom': '0.25rem', 'color': '#0b1b2d', 'fontWeight': '700'}),
-                        html.Small(f"σ = {stats.get('pressure', {}).get('std') or 0:.2f}", style={'color': '#94a3b8'})
-                    ], style={'padding': '1.1rem 1.25rem 1.2rem'})
-                ], style={
-                    'backgroundColor': '#ffffff',
-                    'borderRadius': '14px',
-                    'boxShadow': '0 12px 28px rgba(12,23,42,0.08)',
-                    'border': '1px solid #e6ecf5'
-                })
-            ], md=3),
-            dbc.Col([
-                html.Div([
-                    html.Div(style={'height': '4px', 'borderRadius': '10px', 'background': 'linear-gradient(90deg, #0ea5e9, #22c55e)'}),
-                    html.Div([
-                        html.Div("Health Score", style={'color': '#6b7280', 'fontSize': '0.9rem', 'fontWeight': '600'}),
-                        html.Div([
-                            html.H3(f"{health_score}%", style={'marginBottom': '0', 'color': '#0b1b2d', 'fontWeight': '700'}),
-                            dbc.Badge(
-                                risk_level.upper(),
-                                color="danger" if risk_level == "high" else "warning" if risk_level == "medium" else "success",
-                                className="ms-2"
-                            )
-                        ], className="d-flex align-items-center mt-1")
-                    ], style={'padding': '1.1rem 1.25rem 1.2rem'})
-                ], style={
-                    'backgroundColor': '#ffffff',
-                    'borderRadius': '14px',
-                    'boxShadow': '0 12px 28px rgba(12,23,42,0.08)',
-                    'border': '1px solid #e6ecf5'
-                })
-            ], md=3),
-            dbc.Col([
-                html.Div([
-                    html.Div(style={'height': '4px', 'borderRadius': '10px', 'background': 'linear-gradient(90deg, #f97316, #ef4444)'}),
-                    html.Div([
-                        html.Div("Anomaly Rate", style={'color': '#6b7280', 'fontSize': '0.9rem', 'fontWeight': '600'}),
-                        html.H3(f"{anomaly_rate:.2f}/hr", style={'marginBottom': '0.25rem', 'color': '#0b1b2d', 'fontWeight': '700'}),
-                        html.Small(f"Total: {len(anomalies)}", style={'color': '#94a3b8'})
-                    ], style={'padding': '1.1rem 1.25rem 1.2rem'})
+                    html.Div(style={'height': '4px', 'borderRadius': '10px', 'background': gradient}),
+                    html.Div(children, style={'padding': '1.1rem 1.25rem 1.2rem'})
                 ], style={
                     'backgroundColor': '#ffffff',
                     'borderRadius': '14px',
@@ -329,7 +336,83 @@ def register_callbacks(app, service_client):
                     'border': '1px solid #e6ecf5'
                 })
             ], md=3)
-        ], className="g-3")
+
+        temp_card = _sensor_card(
+            "Avg Temperature",
+            'linear-gradient(90deg, #22d3ee, #38bdf8)',
+            'temperature',
+            lambda v: f"{v:.1f}°C",
+        )
+        pressure_card = _sensor_card(
+            "Avg Pressure",
+            'linear-gradient(90deg, #6366f1, #22d3ee)',
+            'pressure',
+            lambda v: f"{v:.1f} PSI",
+        )
+
+        factor_chips = [
+            dbc.Badge(
+                (f.get('factor', '?') if isinstance(f, dict) else str(f)).replace('_', ' '),
+                color=_factor_tone(f.get('weight', 0) if isinstance(f, dict) else 0),
+                className="me-1 mb-1",
+                pill=True,
+            )
+            for f in risk_factors
+        ]
+
+        try:
+            risk_score_num = float(risk_score or 0)
+        except (TypeError, ValueError):
+            risk_score_num = 0
+
+        health_card_children = [
+            html.Div("Health Score", style={'color': '#6b7280', 'fontSize': '0.9rem', 'fontWeight': '600'}),
+            html.Div([
+                html.H3(f"{health_score}%", style={'marginBottom': '0', 'color': '#0b1b2d', 'fontWeight': '700'}),
+                dbc.Badge(
+                    risk_level.upper(),
+                    color="danger" if risk_level in ("high", "critical") else "warning" if risk_level == "medium" else "success",
+                    className="ms-2"
+                )
+            ], className="d-flex align-items-center mt-1"),
+            html.Div([
+                html.Span("Risk ", style={'color': '#6b7280', 'fontSize': '0.78rem'}),
+                html.Span(f"{risk_score_num:.0f} / 100",
+                          style={'color': '#0b1b2d', 'fontWeight': '700', 'fontSize': '0.85rem'}),
+            ], style={'marginTop': '0.45rem'}),
+        ]
+        if factor_chips:
+            health_card_children.append(html.Div(factor_chips, style={'marginTop': '0.4rem'}))
+
+        health_card = dbc.Col([
+            html.Div([
+                html.Div(style={'height': '4px', 'borderRadius': '10px', 'background': 'linear-gradient(90deg, #0ea5e9, #22c55e)'}),
+                html.Div(health_card_children, style={'padding': '1.1rem 1.25rem 1.2rem'})
+            ], style={
+                'backgroundColor': '#ffffff',
+                'borderRadius': '14px',
+                'boxShadow': '0 12px 28px rgba(12,23,42,0.08)',
+                'border': '1px solid #e6ecf5'
+            })
+        ], md=3)
+
+        anomaly_card = dbc.Col([
+            html.Div([
+                html.Div(style={'height': '4px', 'borderRadius': '10px', 'background': 'linear-gradient(90deg, #f97316, #ef4444)'}),
+                html.Div([
+                    html.Div("Anomaly Rate", style={'color': '#6b7280', 'fontSize': '0.9rem', 'fontWeight': '600'}),
+                    html.H3(f"{anomaly_rate:.2f}/hr", style={'marginBottom': '0.25rem', 'color': '#0b1b2d', 'fontWeight': '700'}),
+                    html.Small(f"Total: {len(anomalies)}", style={'color': '#94a3b8'})
+                ], style={'padding': '1.1rem 1.25rem 1.2rem'})
+            ], style={
+                'backgroundColor': '#ffffff',
+                'borderRadius': '14px',
+                'boxShadow': '0 12px 28px rgba(12,23,42,0.08)',
+                'border': '1px solid #e6ecf5'
+            })
+        ], md=3)
+
+        return dbc.Row([temp_card, pressure_card, health_card, anomaly_card], className="g-3")
 
     @app.callback(
         [Output('correlation-chart', 'figure'),

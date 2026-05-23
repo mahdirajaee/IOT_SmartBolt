@@ -5,6 +5,7 @@ from datetime import datetime
 import logging
 import os
 from components.layouts import format_timestamp
+from components.terminal_banner import print_banner
 
 logger = logging.getLogger(__name__)
 
@@ -431,6 +432,15 @@ def register_callbacks(app, service_client):
                 'pipeline_id': pipeline_id
             }
         elif triggered_id == 'emergency-shutdown-btn':
+            logger.warning("control: EMERGENCY SHUTDOWN modal opened (awaiting user confirmation)")
+            print_banner(
+                "EMERGENCY SHUTDOWN REQUESTED",
+                [
+                    "all valves will close across all pipelines if confirmed",
+                    "awaiting user confirmation",
+                ],
+                kind="danger",
+            )
             message = html.Div([
                 html.H5("⚠️ EMERGENCY SHUTDOWN ⚠️", className="text-danger"),
                 html.P("This will immediately close ALL valves in ALL pipelines!"),
@@ -466,8 +476,21 @@ def register_callbacks(app, service_client):
         feedback_open = False
 
         if triggered_id == 'confirm-action' and pending_action:
-            result = execute_valve_control(pending_action, auth_token, service_client)
             action_type = pending_action.get('type', '')
+            pipeline_id = pending_action.get('pipeline_id') or '-'
+            valve_id = pending_action.get('valve_id') or '-'
+            logger.info(f"control: execute {action_type} pipeline={pipeline_id} valve={valve_id}")
+            result = execute_valve_control(pending_action, auth_token, service_client)
+            logger.info(f"control: result {action_type} pipeline={pipeline_id} valve={valve_id} success={bool(result)}")
+            print_banner(
+                f"VALVE COMMAND {'SUCCESS' if result else 'FAILED'}",
+                [
+                    f"action:   {action_type}",
+                    f"pipeline: {pipeline_id}",
+                    f"valve:    {valve_id}",
+                ],
+                kind="success" if result else "danger",
+            )
             if result:
                 feedback_msg = f"Command '{action_type.replace('_', ' ')}' executed successfully."
                 feedback_color = "success"
@@ -549,7 +572,17 @@ def execute_valve_control(action_data, auth_token, service_client):
             return success
 
         elif action_type == 'emergency_shutdown':
-            return service_client.activate_emergency(auth_token)
+            ok = service_client.activate_emergency(auth_token)
+            if ok:
+                print_banner(
+                    "EMERGENCY SHUTDOWN ACTIVATED",
+                    [
+                        "system-wide valve closure dispatched",
+                        f"target:   all valves across all sectors",
+                    ],
+                    kind="danger",
+                )
+            return ok
 
         return False
 

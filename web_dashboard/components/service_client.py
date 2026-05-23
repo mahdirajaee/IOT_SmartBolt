@@ -94,8 +94,8 @@ class ServiceClient:
         services = response.get('services') or {}
         return list(services.values())
 
-    def get_sensor_data(self, sensor_type: str, pipeline_id: str = None, hours: int = 24) -> List[Dict]:
-        params = {'hours': hours}
+    def get_sensor_data(self, sensor_type: str, pipeline_id: Optional[str] = None, hours: int = 24) -> List[Dict]:
+        params: Dict[str, Any] = {'hours': hours}
         if pipeline_id:
             params['pipeline_id'] = pipeline_id
 
@@ -119,19 +119,19 @@ class ServiceClient:
             })
         return result
 
-    def get_statistics(self, pipeline_id: Optional[str] = None, bolt_id: Optional[str] = None) -> Dict:
+    def get_statistics(self, pipeline_id: Optional[str] = None, bolt_id: Optional[str] = None, hours: int = 24) -> Dict:
         try:
             result = {'temperature': {}, 'pressure': {}}
 
             for sensor in ['temperature', 'pressure']:
                 if pipeline_id and bolt_id:
                     resp = self._make_request('GET', f"{self.analytics_url}/statistics",
-                                              params={'pipeline_id': pipeline_id, 'bolt_id': bolt_id, 'sensor': sensor, 'hours': 24})
+                                              params={'pipeline_id': pipeline_id, 'bolt_id': bolt_id, 'sensor': sensor, 'hours': hours})
                     if resp and resp.get('statistics'):
                         result[sensor] = resp['statistics']
                 else:
                     resp = self._make_request('GET', f"{self.analytics_url}/aggregated",
-                                              params={'measurement': sensor, 'aggregation': 'mean', 'hours': 24})
+                                              params={'measurement': sensor, 'aggregation': 'mean', 'hours': hours})
                     if resp and resp.get('data'):
                         values = [d.get('value') for d in resp['data'] if d.get('value') is not None]
                         if values:
@@ -144,7 +144,7 @@ class ServiceClient:
             return {'temperature': {}, 'pressure': {}}
 
     def get_alerts(self, pipeline_id: Optional[str] = None, limit: int = 50, bolt_id: Optional[str] = None, severity: Optional[str] = None, hours: int = 24) -> List[Dict]:
-        params = {'limit': limit}
+        params: Dict[str, Any] = {'limit': limit}
         if pipeline_id:
             params['pipeline_id'] = pipeline_id
         if severity:
@@ -219,8 +219,28 @@ class ServiceClient:
         score = resp.get('health_score', 0)
         return {
             'health_score': int(score) if isinstance(score, (int, float)) else 0,
+            'risk_score': risk.get('risk_score', 0),
             'risk_level': risk.get('risk_level', 'unknown'),
-            'risk_factors': [f.get('factor') if isinstance(f, dict) else f for f in (risk.get('risk_factors') or [])]
+            'risk_factors': risk.get('risk_factors') or [],
+        }
+
+    def get_trend(self, pipeline_id: str, bolt_id: Optional[str] = None) -> Dict:
+        bid = bolt_id
+        if not bid:
+            details = self._make_request('GET', f"{self.catalog_url}/pipelines/{pipeline_id}")
+            if details:
+                bolts = details.get('bolts') or []
+                if bolts:
+                    bid = bolts[0].get('id')
+        if not bid:
+            return {}
+        resp = self._make_request('GET', f"{self.analytics_url}/trend",
+                                  params={'pipeline_id': pipeline_id, 'bolt_id': bid})
+        if not resp:
+            return {}
+        return {
+            'temperature': resp.get('temperature_trend') or {},
+            'pressure': resp.get('pressure_trend') or {},
         }
 
     def send_valve_command(self, pipeline_id: str, valve_id: str, command: str, token: str) -> Dict:
@@ -310,7 +330,7 @@ class ServiceClient:
         headers = {'Authorization': f'Bearer {token}'}
         response = self._make_request('GET', f"{self.catalog_url}/pipelines", headers=headers)
         if not response:
-            return []
+            return {}
         return response.get('pipeline_bundles', {})
 
     def create_pipeline_bundle(self, token: str, bundle_data: Dict) -> Dict:

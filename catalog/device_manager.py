@@ -4,22 +4,25 @@ import time
 import logging
 import json
 import os
+import requests
 from datetime import datetime, timezone
+from terminal_banner import print_banner
 
 logger = logging.getLogger(__name__)
 
 class DeviceManager:
     # manages devices, pipelines, bolts, valves
-    def __init__(self, data_file="catalog.json"):
+    def __init__(self, data_file="catalog.json", account_manager_url=None, internal_api_key=None):
         script_dir = os.path.dirname(os.path.abspath(__file__))
         self.data_file = os.path.join(script_dir, data_file)
+        self.account_manager_url = account_manager_url
+        self.internal_api_key = internal_api_key
         self.catalog = {
             "projectOwner": "Mahdi Rajaee, Mohammad Eftekharipour, Tanin Heidarloui Moghaddam",
             "projectName": "IoT Pipeline Monitoring System",
             "lastUpdate": "",
             "broker": {"IP": "localhost", "port": 1883},
             "servicesList": [],
-            "usersList": [],
             "sectorsList": []
         }
         self.devices = {
@@ -54,13 +57,25 @@ class DeviceManager:
 
     def _derive_sector_owner(self, sector_id, existing_sector=None):
         if existing_sector and existing_sector.get("userID") not in ("", None):
-            return existing_sector.get("userID")
+            return existing_sector.get("userID"), existing_sector.get("chatID", "") or ""
 
-        for user in self.catalog.get("usersList", []):
-            for sector in user.get("sectors", []):
-                if sector.get("sectorID") == sector_id:
-                    return user.get("userID", "")
-        return ""
+        if not self.account_manager_url:
+            return "", ""
+        try:
+            resp = requests.get(
+                f"{self.account_manager_url}/internal/users",
+                headers={"X-Internal-API-Key": self.internal_api_key},
+                timeout=int(os.environ['HTTP_TIMEOUT']),
+            )
+            if resp.status_code != 200:
+                return "", ""
+            for user in resp.json().get("users", []):
+                for sector in user.get("sectors", []):
+                    if sector.get("sectorID") == sector_id:
+                        return user.get("userID", ""), user.get("chatID", "") or ""
+        except Exception as e:
+            logger.warning(f"Failed to derive sector owner from account_manager: {e}")
+        return "", ""
 
     def _build_devices_from_catalog(self):
         self.devices = {"pipelines": {}, "bolts": {}, "valves": {}}
@@ -75,9 +90,11 @@ class DeviceManager:
                 self.devices["pipelines"][pipeline_id] = {
                     "id": pipeline_id,
                     "sector_id": sector_id,
+                    "name": pipeline.get("name", ""),
                     "location": pipeline.get("location", ""),
                     "description": pipeline.get("description", ""),
                     "status": pipeline.get("status", "active"),
+                    "sensor_limits": pipeline.get("sensor_limits", {}),
                     "registered_at": time.time(),
                     "last_update": time.time(),
                     "bolts": [],
@@ -108,8 +125,8 @@ class DeviceManager:
                             "id": device_id,
                             "pipeline_id": pipeline_id,
                             "location": f"Pipeline {pipeline_id} main valve",
-                            "normally_open": False,
-                            "current_state": "closed",
+                            "normally_open": device.get("normallyOpen", False),
+                            "current_state": device.get("currentState", "closed"),
                             "status": "active",
                             "registered_at": time.time(),
                             "last_update": time.time(),
@@ -123,6 +140,12 @@ class DeviceManager:
         if device_type == "bolt":
             pid = pipeline_id or self.devices["bolts"].get(device_id, {}).get("pipeline_id", "")
             sid = self.devices["pipelines"].get(pid, {}).get("sector_id", "")
+            runtime = self.devices["bolts"].get(device_id, {})
+            last_update_ts = runtime.get("last_update")
+            last_update_str = (
+                datetime.fromtimestamp(last_update_ts).strftime("%Y-%m-%d %H:%M:%S")
+                if last_update_ts else ""
+            )
             return {
                 "deviceID": device_id,
                 "deviceName": "Smart Bolt",
@@ -130,13 +153,19 @@ class DeviceManager:
                 "availableServices": ["MQTT", "REST"],
                 "servicesDetails": [
                     {"serviceType": "MQTT", "topic": [f"sectors/{sid}/pipelines/{pid}/measurements"]},
-                    {"serviceType": "REST", "serviceIP": "localhost:8082"}
+                    {"serviceType": "REST", "serviceIP": os.environ['TIMESERIES_SERVICE_IP']}
                 ],
-                "lastUpdate": ""
+                "lastUpdate": last_update_str
             }
         else:
             pid = pipeline_id or self.devices["valves"].get(device_id, {}).get("pipeline_id", "")
             sid = self.devices["pipelines"].get(pid, {}).get("sector_id", "")
+            runtime = self.devices["valves"].get(device_id, {})
+            last_update_ts = runtime.get("last_update")
+            last_update_str = (
+                datetime.fromtimestamp(last_update_ts).strftime("%Y-%m-%d %H:%M:%S")
+                if last_update_ts else ""
+            )
             return {
                 "deviceID": device_id,
                 "deviceName": "Control Valve",
@@ -145,7 +174,9 @@ class DeviceManager:
                 "servicesDetails": [
                     {"serviceType": "MQTT", "topic": [f"sectors/{sid}/pipelines/{pid}/commands/valves"]}
                 ],
-                "lastUpdate": ""
+                "normallyOpen": runtime.get("normally_open", False),
+                "currentState": runtime.get("current_state", "unknown"),
+                "lastUpdate": last_update_str
             }
 
     def _sync_devices_to_catalog(self):
@@ -167,20 +198,37 @@ class DeviceManager:
 
             sectors_map[sid].append({
                 "pipelineID": pid,
+                "name": pdata.get("name", ""),
                 "location": pdata.get("location", ""),
                 "description": pdata.get("description", ""),
                 "status": pdata.get("status", "active"),
+                "sensor_limits": pdata.get("sensor_limits", {}),
                 "devicesList": devices_list
             })
 
         new_sectors = []
+        seen_sectors = set()
         for sid, pipelines in sectors_map.items():
             existing = existing_sectors.get(sid, {})
+            user_id, chat_id = self._derive_sector_owner(sid, existing)
             new_sectors.append({
-                "userID": self._derive_sector_owner(sid, existing),
+                "userID": user_id,
+                "chatID": chat_id,
                 "sectorID": sid,
                 "pipelinesList": pipelines
             })
+            seen_sectors.add(sid)
+
+        for sid, sector in existing_sectors.items():
+            if sid in seen_sectors:
+                continue
+            if sector.get("userID"):
+                new_sectors.append({
+                    "userID": sector.get("userID"),
+                    "chatID": sector.get("chatID", "") or "",
+                    "sectorID": sid,
+                    "pipelinesList": []
+                })
 
         self.catalog["sectorsList"] = new_sectors
         self.catalog.pop("devicesList", None)
@@ -207,6 +255,11 @@ class DeviceManager:
                 logger.info(f"Catalog saved to {self.data_file}")
             except Exception as e:
                 logger.error(f"Failed to save catalog: {e}")
+                print_banner(
+                    "CATALOG SAVE FAILED",
+                    [f"file: {self.data_file}", f"reason: {e}"],
+                    kind="danger",
+                )
             finally:
                 if tmp_path is not None:
                     try:
@@ -331,11 +384,25 @@ class DeviceManager:
     def update_valve_state(self, valve_id, state, command=None):
         if valve_id in self.devices["valves"]:
             valve = self.devices["valves"][valve_id]
+            previous_state = valve.get("current_state")
+            changed = previous_state != state
             valve["current_state"] = state
             if command:
                 valve["last_command"] = command
                 valve["last_command_time"] = time.time()
             valve["last_update"] = time.time()
+            if changed:
+                pipeline_id = valve.get("pipeline_id", "?")
+                print_banner(
+                    "VALVE STATE CHANGED",
+                    [
+                        f"valve={valve_id}  pipeline={pipeline_id}",
+                        f"{previous_state} -> {state}",
+                        f"command={command or '-'}",
+                    ],
+                    kind="event",
+                )
+                self._save_catalog()
             return True
         return False
 
@@ -407,6 +474,11 @@ class DeviceManager:
             }
 
             logger.info(f"Pipeline bundle created: {pipeline_id} with 1 bolt and 1 valve")
+            print_banner(
+                "PIPELINE CREATED",
+                [f"id={pipeline_id}", f"sector={sector_id or '-'}", f"name={name or '-'}"],
+                kind="success",
+            )
             self._save_catalog()
             return bundle_info
 
@@ -450,7 +522,80 @@ class DeviceManager:
         del self.devices["pipelines"][pipeline_id]
 
         logger.info(f"Pipeline bundle removed: {pipeline_id} with {len(bolt_ids)} bolts and {len(valve_ids)} valves")
+        print_banner(
+            "PIPELINE DELETED",
+            [f"id={pipeline_id}", f"bolts={len(bolt_ids)}", f"valves={len(valve_ids)}"],
+            kind="event",
+        )
         self._save_catalog()
+        return True
+
+    def remove_sectors_by_owner(self, user_id):
+        sectors = self.catalog.get("sectorsList", [])
+        matching = [s for s in sectors if s.get("userID") == user_id]
+        if not matching:
+            return {"removed_sectors": 0, "removed_pipelines": 0}
+
+        pipeline_count = 0
+        for sector in matching:
+            for pipeline in sector.get("pipelinesList", []):
+                pid = pipeline.get("pipelineID")
+                if pid and self.remove_pipeline_bundle(pid):
+                    pipeline_count += 1
+
+        matching_ids = {s.get("sectorID") for s in matching}
+        with self._save_lock:
+            self.catalog["sectorsList"] = [
+                s for s in self.catalog.get("sectorsList", [])
+                if s.get("sectorID") not in matching_ids
+            ]
+
+        self._save_catalog()
+        logger.info(f"Removed {len(matching)} sector(s) and {pipeline_count} pipeline(s) for user {user_id}")
+        return {"removed_sectors": len(matching), "removed_pipelines": pipeline_count}
+
+    def assign_sector_owner(self, sector_id, user_id, chat_id=None):
+        if not sector_id:
+            return False
+
+        if user_id in ("", None):
+            normalized_user = ""
+        else:
+            try:
+                normalized_user = int(user_id)
+            except (ValueError, TypeError):
+                normalized_user = user_id
+
+        normalized_chat = None
+        if chat_id is not None:
+            normalized_chat = "" if chat_id in ("", None) else str(chat_id)
+
+        with self._save_lock:
+            sectors = self.catalog.get("sectorsList", [])
+            found = False
+            for sector in sectors:
+                if sector.get("sectorID") == sector_id:
+                    sector["userID"] = normalized_user
+                    if normalized_chat is not None:
+                        sector["chatID"] = normalized_chat
+                    elif "chatID" not in sector:
+                        sector["chatID"] = ""
+                    found = True
+                    break
+
+            if not found:
+                if normalized_user == "":
+                    return True
+                sectors.append({
+                    "userID": normalized_user,
+                    "chatID": normalized_chat if normalized_chat is not None else "",
+                    "sectorID": sector_id,
+                    "pipelinesList": []
+                })
+                self.catalog["sectorsList"] = sectors
+
+        self._save_catalog()
+        logger.info(f"Sector {sector_id} owner set to {normalized_user!r} chat={normalized_chat!r}")
         return True
 
     def get_pipeline_bundle(self, pipeline_id):

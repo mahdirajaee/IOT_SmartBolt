@@ -155,22 +155,31 @@ def register_callbacks(app, service_client):
         active_pipelines = sum(1 for p in pipelines if p.get('status') == 'active')
         total_pipelines = len(pipelines)
 
-        pid, bid = None, None
-        if sector_filter and sector_filter != 'all' and pipelines:
-            first = pipelines[0]
-            pid = first['pipeline_id']
-            bolts = first.get('bolts', [])
-            if bolts:
-                bid = bolts[0] if isinstance(bolts[0], str) else bolts[0].get('bolt_id')
-        statistics = service_client.get_statistics(pipeline_id=pid, bolt_id=bid)
-        avg_temp = statistics.get('temperature', {}).get('mean')
-        avg_pressure = statistics.get('pressure', {}).get('mean')
+        avg_temp = None
+        avg_pressure = None
+        critical_count = 0
+        warning_count = 0
 
-        pipeline_ids = {p['pipeline_id'] for p in pipelines}
-        all_anomalies = service_client.get_alerts(limit=100)
-        anomalies = [a for a in all_anomalies if not pipeline_ids or a.get('pipeline_id') in pipeline_ids]
-        critical_count = sum(1 for a in anomalies if a.get('severity') == 'critical')
-        warning_count = sum(1 for a in anomalies if a.get('severity') == 'warning')
+        # Skip TSDB lookups entirely when no pipelines are registered — otherwise
+        # the global aggregate query returns leftover history from prior runs.
+        # 1h window keeps the presentation immune to data older than the talk.
+        if pipelines:
+            pid, bid = None, None
+            if sector_filter and sector_filter != 'all':
+                first = pipelines[0]
+                pid = first['pipeline_id']
+                bolts = first.get('bolts', [])
+                if bolts:
+                    bid = bolts[0] if isinstance(bolts[0], str) else bolts[0].get('bolt_id')
+            statistics = service_client.get_statistics(pipeline_id=pid, bolt_id=bid, hours=1)
+            avg_temp = statistics.get('temperature', {}).get('mean')
+            avg_pressure = statistics.get('pressure', {}).get('mean')
+
+            pipeline_ids = {p['pipeline_id'] for p in pipelines}
+            all_anomalies = service_client.get_alerts(limit=100)
+            anomalies = [a for a in all_anomalies if a.get('pipeline_id') in pipeline_ids]
+            critical_count = sum(1 for a in anomalies if a.get('severity') == 'critical')
+            warning_count = sum(1 for a in anomalies if a.get('severity') == 'warning')
 
         def _card(icon, color, label, value_content):
             return dbc.Col([
@@ -223,14 +232,13 @@ def register_callbacks(app, service_client):
     def update_charts(n, sector_filter):
         temp_data = []
         pressure_data = []
-        if sector_filter and sector_filter != 'all':
-            sector_pipelines = service_client.get_pipelines_by_sector(sector_filter)
-            for p in sector_pipelines:
-                temp_data.extend(service_client.get_sensor_data('temperature', pipeline_id=p['pipeline_id'], hours=24))
-                pressure_data.extend(service_client.get_sensor_data('pressure', pipeline_id=p['pipeline_id'], hours=24))
-        else:
-            temp_data = service_client.get_sensor_data('temperature', hours=24)
-            pressure_data = service_client.get_sensor_data('pressure', hours=24)
+        # Iterate per-pipeline (even on "All Sectors") so we never pull data for
+        # pipelines that are no longer in the catalog. 1h window keeps the chart
+        # immune to leftover writes from prior runs.
+        sector_pipelines = service_client.get_pipelines_by_sector(sector_filter)
+        for p in sector_pipelines:
+            temp_data.extend(service_client.get_sensor_data('temperature', pipeline_id=p['pipeline_id'], hours=1))
+            pressure_data.extend(service_client.get_sensor_data('pressure', pipeline_id=p['pipeline_id'], hours=1))
 
         temp_fig = go.Figure()
         if temp_data:

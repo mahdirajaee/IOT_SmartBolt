@@ -1,6 +1,7 @@
 import json
 
 import paho.mqtt.client as PahoMQTT
+from paho.mqtt.enums import CallbackAPIVersion
 
 
 class MyMQTT:
@@ -11,7 +12,8 @@ class MyMQTT:
         self.clientID = clientID
         self._topics = []
         self._isSubscriber = False
-        self._paho_mqtt = PahoMQTT.Client(callback_api_version=PahoMQTT.CallbackAPIVersion.VERSION1, client_id=clientID, clean_session=clean_session)
+        self.connected = False
+        self._paho_mqtt = PahoMQTT.Client(callback_api_version=CallbackAPIVersion.VERSION1, client_id=clientID, clean_session=clean_session)
         self._paho_mqtt.on_connect = self.myOnConnect
         self._paho_mqtt.on_message = self.myOnMessageReceived
         self._paho_mqtt.on_disconnect = self.myOnDisconnect
@@ -19,10 +21,12 @@ class MyMQTT:
 
     def myOnConnect(self, paho_mqtt, userdata, flags, rc):
         print("Connected to %s with result code: %d" % (self.broker, rc))
+        self.connected = (rc == 0)
         for topic in self._topics:
             self._paho_mqtt.subscribe(topic, 2)
 
     def myOnDisconnect(self, paho_mqtt, userdata, rc):
+        self.connected = False
         if rc != 0:
             print("Unexpected disconnection from %s (rc: %d)" % (self.broker, rc))
         else:

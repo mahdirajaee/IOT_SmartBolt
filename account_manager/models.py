@@ -1,3 +1,4 @@
+import os
 from datetime import datetime
 
 class User:
@@ -42,9 +43,10 @@ class User:
     
     def validate(self):
         errors = []
-        
-        if not self.username or len(self.username) < 3:
-            errors.append("Username must be at least 3 characters long")
+        username_min = int(os.environ['USERNAME_MIN_LENGTH'])
+
+        if not self.username or len(self.username) < username_min:
+            errors.append(f"Username must be at least {username_min} characters long")
         
         if not self.email or '@' not in self.email:
             errors.append("Invalid email address")
