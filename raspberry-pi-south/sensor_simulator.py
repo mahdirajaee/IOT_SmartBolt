@@ -10,20 +10,25 @@ from dotenv import load_dotenv
 from pipeline_manager import PipelineManager
 from mqtt_publisher import MQTTPublisher
 
+GREEN = "\033[92m"
+RED   = "\033[91m"
+RESET = "\033[0m"
+
 logger = logging.getLogger(__name__)
 
 class SensorSimulator:
     def __init__(self):
         load_dotenv()
         
-        self.mqtt_broker = os.getenv("MQTT_BROKER", "localhost")
-        self.mqtt_port = int(os.getenv("MQTT_PORT", 1883))
-        self.mqtt_client_id = os.getenv("MQTT_CLIENT_ID", "sensor-simulator-south")
-        self.mqtt_topic = f"sectors/{os.getenv('SECTOR_ID', 'sector-south')}/pipelines/+/measurements"
-        
-        self.publish_interval = int(os.getenv("PUBLISH_INTERVAL", 5))
-        self.catalog_url = os.getenv("CATALOG_URL", "http://localhost:8081")
-        self.service_name = os.getenv("REGISTRATION_NAME", "raspberry_pi_south")
+        self.mqtt_broker = os.environ["MQTT_BROKER"]
+        self.mqtt_port = int(os.environ["MQTT_PORT"])
+        self.mqtt_client_id = os.environ["MQTT_CLIENT_ID"]
+        self.mqtt_topic = f"sectors/{os.environ['SECTOR_ID']}/pipelines/+/measurements"
+
+        self.publish_interval = int(os.environ["PUBLISH_INTERVAL"])
+        self.catalog_url = os.environ["CATALOG_URL"]
+        self.service_name = os.environ["REGISTRATION_NAME"]
+        self.simulation_retry_delay = int(os.environ["SIMULATION_RETRY_DELAY"])
         
         self.pipeline_manager = PipelineManager()
         self.mqtt_publisher = MQTTPublisher(
@@ -35,40 +40,29 @@ class SensorSimulator:
         self.running = False
         self.simulation_thread = None
         self.start_time = time.time()
-        
-        self.data_folder = os.path.join(os.path.dirname(__file__), 'data')
-        self.persist_data = os.getenv("PERSIST_DATA", "true").lower() == "true"
-        
+
         self.stats = {
             "total_messages": 0,
             "successful_publishes": 0,
             "failed_publishes": 0,
             "valve_commands_received": 0
         }
-        
+
         self._setup_mqtt_handlers()
-        self._ensure_data_folder()
-    
+
     def _setup_mqtt_handlers(self):
-        sector_id = os.getenv("SECTOR_ID", "sector-south")
+        sector_id = os.environ["SECTOR_ID"]
         self.mqtt_publisher.register_command_handler(
             f"sectors/{sector_id}/pipelines/+/commands/valves",
             self._handle_valve_command
         )
-    
-    def _ensure_data_folder(self):
-        if self.persist_data and not os.path.exists(self.data_folder):
-            os.makedirs(self.data_folder)
-            logger.info(f"Created data folder: {self.data_folder}")
-    
+
     def initialize(self) -> bool:
         try:
             if not self.mqtt_publisher.connect():
                 logger.error("Failed to connect to MQTT broker")
                 return False
-            
-            self._register_in_catalog()
-            
+
             self.pipeline_manager.add_observer(self._on_config_change)
             
             logger.info("Sensor simulator initialized successfully")
@@ -111,7 +105,7 @@ class SensorSimulator:
                 time.sleep(interval)
             except Exception as e:
                 logger.error(f"Error in simulation loop: {e}")
-                time.sleep(1)
+                time.sleep(self.simulation_retry_delay)
     
     def _generate_and_publish_data(self):
         pipelines = self.pipeline_manager.get_all_pipelines()
@@ -163,7 +157,10 @@ class SensorSimulator:
             
             if success:
                 self.stats["valve_commands_received"] += 1
-                logger.info(f"Valve {valve_id} in pipeline {pipeline_id} set to {command}")
+                color = RED if command == "open" else GREEN
+                logger.info(f"{color}Valve {valve_id} in pipeline {pipeline_id} set to {command}{RESET}")
+            else:
+                logger.error(f"Failed to set valve {valve_id} in pipeline {pipeline_id}")
                 
                 self.mqtt_publisher.publish_event("valve_changed", {
                     "pipeline_id": pipeline_id,
@@ -171,33 +168,13 @@ class SensorSimulator:
                     "state": command,
                     "success": True
                 })
-            else:
-                logger.error(f"Failed to set valve {valve_id} in pipeline {pipeline_id}")
                 
         except Exception as e:
             logger.error(f"Error handling valve command: {e}")
     
     def _on_config_change(self, config: Dict[str, Any]):
         logger.info("Pipeline configuration changed")
-        self._register_in_catalog()
-    
-    def _register_in_catalog(self):
-        try:
-            from common_utils import CatalogClient
-            port = int(os.getenv('SERVICE_PORT', 8088))
-            client = CatalogClient(self.catalog_url)
-            if client.register_service(
-                name=self.service_name,
-                host="localhost",
-                port=port,
-                description="Raspberry Pi South sensor simulator"
-            ):
-                logger.info("Successfully registered with catalog")
-            else:
-                logger.warning("Catalog registration failed")
-        except Exception as e:
-            logger.warning(f"Could not reach catalog: {e}")
-    
+
     def get_status(self) -> Dict[str, Any]:
         return {
             "running": self.running,
@@ -207,7 +184,6 @@ class SensorSimulator:
             "simulation": {
                 **self.stats,
                 "publish_interval": self.publish_interval,
-                "data_persistence": self.persist_data
             }
         }
     

@@ -15,9 +15,10 @@ class MQTTPublisher:
     def __init__(self, broker, port, client_id=None):
         self.broker = broker
         self.port = port
-        self.sector_id = os.getenv("SECTOR_ID", "sector-north")
+        self.sector_id = os.environ["SECTOR_ID"]
         self.client_id = client_id or f"raspberrypi-{self.sector_id}-{int(time.time())}"
-        self.mqtt_topic_prefix = os.getenv("MQTT_TOPIC_PREFIX", "sectors")
+        self.mqtt_topic_prefix = os.environ["MQTT_TOPIC_PREFIX"]
+        self.mqtt_start_wait = int(os.environ["MQTT_START_WAIT"])
 
         self.mqtt = MyMQTT(self.client_id, self.broker, self.port, self)
 
@@ -54,7 +55,7 @@ class MQTTPublisher:
         try:
             self.stats["connection_attempts"] += 1
             self.mqtt.start()
-            time.sleep(1)
+            time.sleep(self.mqtt_start_wait)
             self.connected = True
 
             self._subscribe_to_commands()

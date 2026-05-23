@@ -4,19 +4,19 @@ import os
 import time
 import signal
 import sys
+import threading
 import logging
+import requests
 from dotenv import load_dotenv
+
+
+load_dotenv()
 
 from sensor_simulator import SensorSimulator
 from pipeline_manager import PipelineManager
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from common_utils import CatalogClient
-
-load_dotenv()
-
 logging.basicConfig(
-    level=getattr(logging, os.getenv("LOG_LEVEL", "INFO")),
+    level=getattr(logging, os.environ["LOG_LEVEL"]),
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
@@ -29,7 +29,7 @@ class RaspberryPiWebService(object):
         self.simulator = SensorSimulator()
         self.pipeline_manager = self.simulator.pipeline_manager
         self.start_time = time.time()
-        self.service_port = int(os.getenv("SERVICE_PORT", 8086))
+        self.service_port = int(os.environ["SERVICE_PORT"])
         
         if not self.simulator.initialize():
             logger.error("Failed to initialize sensor simulator")
@@ -133,17 +133,89 @@ class RaspberryPiWebService(object):
     
 
 def signal_handler(signum, frame):
-   
+
     logger.info("Shutdown signal received")
     cherrypy.engine.exit()
     sys.exit(0)
+
+
+def _print_banner(title, lines, kind="info"):
+    print(f"\n{'-'*11} {title.lower()}", flush=True)
+    for line in lines or []:
+        print(f"  {line}", flush=True)
+
+
+def _register_north_pi_with_catalog(silent=False):
+    catalog_url = os.environ["CATALOG_URL"]
+    name = os.environ["REGISTRATION_NAME"]
+    host = os.environ["CHERRYPY_HOST"]
+    port = int(os.environ["SERVICE_PORT"])
+    payload = {
+        "name": name,
+        "host": host,
+        "port": port,
+        "health_endpoint": "/health",
+        "description": "Sensor simulation & control service",
+    }
+    try:
+        response = requests.post(
+            f"{catalog_url}/services/register",
+            json=payload, timeout=int(os.environ["HTTP_TIMEOUT"]),
+        )
+        if response.status_code == 200:
+            if not silent:
+                _print_banner(
+                    "REGISTERED WITH CATALOG",
+                    [f"service:  {name}",
+                     f"address:  http://{host}:{port}",
+                     f"catalog:  {catalog_url}"],
+                    kind="info",
+                )
+            return True
+        if not silent:
+            _print_banner(
+                "CATALOG REGISTRATION FAILED",
+                [f"status: {response.status_code}",
+                 f"body: {response.text[:200]}"],
+                kind="warning",
+            )
+    except Exception as e:
+        if not silent:
+            _print_banner(
+                "CATALOG UNREACHABLE",
+                [catalog_url, f"reason: {e}"],
+                kind="danger",
+            )
+    return False
+
+
+def _north_pi_catalog_heartbeat():
+    interval = int(os.environ["CATALOG_HEARTBEAT_INTERVAL"])
+    catalog_url = os.environ["CATALOG_URL"]
+    name = os.environ["REGISTRATION_NAME"]
+    host = os.environ["CHERRYPY_HOST"]
+    port = int(os.environ["SERVICE_PORT"])
+    tick = 0
+    while True:
+        time.sleep(interval)
+        tick += 1
+        if _register_north_pi_with_catalog(silent=True):
+            _print_banner(
+                "CATALOG HEARTBEAT",
+                [f"service:  {name}",
+                 f"address:  http://{host}:{port}",
+                 f"catalog:  {catalog_url}",
+                 f"tick:     {tick}"],
+                kind="info",
+            )
+
 
 if __name__ == '__main__':
     signal.signal(signal.SIGINT, signal_handler)
     signal.signal(signal.SIGTERM, signal_handler)
     
-    service_port = int(os.getenv("SERVICE_PORT", 8086))
-    service_host = os.getenv("CHERRYPY_HOST", "127.0.0.1")
+    service_port = int(os.environ["SERVICE_PORT"])
+    service_host = os.environ["CHERRYPY_HOST"]
     config = {
         'global': {
             'server.socket_host': service_host,
@@ -174,17 +246,9 @@ if __name__ == '__main__':
     cherrypy.engine.subscribe("stop", app.simulator.shutdown)
     cherrypy.tree.mount(app, '/', config)
 
-    catalog_url = os.getenv("CATALOG_URL", "http://localhost:8081")
-    catalog_client = CatalogClient(catalog_url)
-    catalog_client.register_service(
-        name=os.getenv("REGISTRATION_NAME", "raspberry_pi_north"),
-        host=service_host,
-        port=service_port,
-        health_endpoint="/health",
-        description="Sensor simulation & control service"
-    )
-
     cherrypy.engine.start()
+    _register_north_pi_with_catalog()
+    threading.Thread(target=_north_pi_catalog_heartbeat, daemon=True, name="catalog-heartbeat").start()
     logger.info(f"Raspberry Pi Service running on port {service_port}")
 
     cherrypy.engine.block()

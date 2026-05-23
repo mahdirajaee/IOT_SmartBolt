@@ -17,21 +17,21 @@ class SensorLimits:
 
 @dataclass
 class SensorConfig:
-    normal_noise_std: float = float(os.getenv("NORMAL_NOISE_STD", "0.5"))
-    drift_rate: float = float(os.getenv("DRIFT_RATE", "0.001"))
-    temp_alert_threshold: float = float(os.getenv("TEMP_ALERT_THRESHOLD", "45.0"))
-    pressure_alert_threshold: float = float(os.getenv("PRESSURE_ALERT_THRESHOLD", "115.0"))
-    smoothing_factor: float = float(os.getenv("SMOOTHING_FACTOR", "0.5"))
-    wave_duration: float = float(os.getenv("WAVE_DURATION", "30.0"))
-    wave_cycle_min: float = float(os.getenv("WAVE_CYCLE_MIN", "30.0"))
-    wave_cycle_max: float = float(os.getenv("WAVE_CYCLE_MAX", "60.0"))
-    temp_wave_amplitude: float = float(os.getenv("TEMP_WAVE_AMPLITUDE", "30.0"))
-    pressure_wave_amplitude: float = float(os.getenv("PRESSURE_WAVE_AMPLITUDE", "25.0"))
-    critical_spike_probability: float = float(os.getenv("CRITICAL_SPIKE_PROBABILITY", "0.05"))
-    critical_spike_temp_min: float = float(os.getenv("CRITICAL_SPIKE_TEMP_MIN", "50.0"))
-    critical_spike_temp_max: float = float(os.getenv("CRITICAL_SPIKE_TEMP_MAX", "65.0"))
-    critical_spike_pressure_min: float = float(os.getenv("CRITICAL_SPIKE_PRESSURE_MIN", "118.0"))
-    critical_spike_pressure_max: float = float(os.getenv("CRITICAL_SPIKE_PRESSURE_MAX", "140.0"))
+    normal_noise_std: float = float(os.environ["NORMAL_NOISE_STD"])
+    drift_rate: float = float(os.environ["DRIFT_RATE"])
+    temp_alert_threshold: float = float(os.environ["TEMP_ALERT_THRESHOLD"])
+    pressure_alert_threshold: float = float(os.environ["PRESSURE_ALERT_THRESHOLD"])
+    smoothing_factor: float = float(os.environ["SMOOTHING_FACTOR"])
+    wave_duration: float = float(os.environ["WAVE_DURATION"])
+    wave_cycle_min: float = float(os.environ["WAVE_CYCLE_MIN"])
+    wave_cycle_max: float = float(os.environ["WAVE_CYCLE_MAX"])
+    temp_wave_amplitude: float = float(os.environ["TEMP_WAVE_AMPLITUDE"])
+    pressure_wave_amplitude: float = float(os.environ["PRESSURE_WAVE_AMPLITUDE"])
+    critical_spike_probability: float = float(os.environ["CRITICAL_SPIKE_PROBABILITY"])
+    critical_spike_temp_min: float = float(os.environ["CRITICAL_SPIKE_TEMP_MIN"])
+    critical_spike_temp_max: float = float(os.environ["CRITICAL_SPIKE_TEMP_MAX"])
+    critical_spike_pressure_min: float = float(os.environ["CRITICAL_SPIKE_PRESSURE_MIN"])
+    critical_spike_pressure_max: float = float(os.environ["CRITICAL_SPIKE_PRESSURE_MAX"])
 
 class Bolt:
     # see north
@@ -181,7 +181,6 @@ class Valve:
             return True
 
         self.state = new_state
-        logger.info(f"Valve {self.valve_id} set to {new_state}")
         return True
 
     def get_status(self) -> Dict[str, Any]:
@@ -258,7 +257,7 @@ class Pipeline:
         return {
             "timestamp": time.time(),
             "pipeline_id": self.pipeline_id,
-            "sector_id": os.getenv("SECTOR_ID", "sector-unknown"),
+            "sector_id": os.environ["SECTOR_ID"],
             "status": "active",
             "bolt_data": bolt_data,
             "valve_status": valve_status,
@@ -276,7 +275,6 @@ class Pipeline:
     def set_valve_state(self, valve_id: str, state: str) -> bool:
         if valve_id in self.valves:
             return self.valves[valve_id].set_state(state)
-        logger.error(f"Valve {valve_id} not found in pipeline {self.pipeline_id}")
         return False
 
     def get_info(self) -> Dict[str, Any]:
