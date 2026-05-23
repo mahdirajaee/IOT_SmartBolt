@@ -1,7 +1,9 @@
+import os
 import time
 import requests
 import threading
 import logging
+from terminal_banner import print_banner
 
 logger = logging.getLogger(__name__)
 
@@ -10,7 +12,9 @@ class ServiceRegistry:
     def __init__(self, device_manager=None):
         self.services = {}
         self.lock = threading.RLock()
-        self.health_check_interval = 30
+        self.health_check_interval = int(os.environ['HEALTH_CHECK_INTERVAL'])
+        self.http_timeout = int(os.environ['HTTP_TIMEOUT'])
+        self.stale_threshold = int(os.environ['STALE_THRESHOLD'])
         self.health_check_thread = None
         self.running = False
         self.device_manager = device_manager
@@ -18,26 +22,39 @@ class ServiceRegistry:
     def register_service(self, service_name, host, port, health_endpoint="/health", description=""):
         service_id = f"{service_name}_{host}_{port}"
         rest_endpoint = f"http://{host}:{port}"
+        now = time.time()
 
         with self.lock:
-            self.services[service_id] = {
-                "name": service_name,
-                "service_id": service_id,
-                "host": host,
-                "port": port,
-                "health_endpoint": health_endpoint,
-                "description": description,
-                "status": "unknown",
-                "last_heartbeat": time.time(),
-                "registered_at": time.time(),
-                "health_check_url": f"http://{host}:{port}{health_endpoint}",
-                "consecutive_failures": 0
-            }
+            existing = service_id in self.services
+            if existing:
+                self.services[service_id]["last_heartbeat"] = now
+            else:
+                self.services[service_id] = {
+                    "name": service_name,
+                    "service_id": service_id,
+                    "host": host,
+                    "port": port,
+                    "health_endpoint": health_endpoint,
+                    "description": description,
+                    "status": "unknown",
+                    "last_heartbeat": now,
+                    "registered_at": now,
+                    "health_check_url": f"http://{host}:{port}{health_endpoint}",
+                    "consecutive_failures": 0
+                }
+
+        if existing:
+            return service_id
 
         if self.device_manager:
             self.device_manager.update_service_in_catalog(service_name, rest_endpoint)
 
         logger.info(f"Service registered: {service_name} at {host}:{port}")
+        print_banner(
+            "SERVICE REGISTERED",
+            [f"{service_name} @ {host}:{port}", f"id: {service_id}"],
+            kind="success",
+        )
         return service_id
 
     def remove_service(self, service_id):
@@ -77,7 +94,7 @@ class ServiceRegistry:
             service = self.services[service_id].copy()
 
         try:
-            response = requests.get(service["health_check_url"], timeout=5)
+            response = requests.get(service["health_check_url"], timeout=self.http_timeout)
             if response.status_code == 200:
                 with self.lock:
                     if service_id in self.services:
@@ -114,7 +131,6 @@ class ServiceRegistry:
         logger.info("Health check monitoring stopped")
 
     def _health_check_loop(self):
-        STALE_THRESHOLD = 10
         while self.running:
             with self.lock:
                 service_ids = list(self.services.keys())
@@ -126,7 +142,15 @@ class ServiceRegistry:
 
                 with self.lock:
                     svc = self.services.get(service_id, {})
-                    if svc.get("consecutive_failures", 0) >= STALE_THRESHOLD:
+                    if svc.get("consecutive_failures", 0) >= self.stale_threshold:
                         logger.info(f"Pruning stale service: {svc.get('name')} (id={service_id})")
+                        print_banner(
+                            "SERVICE PRUNED",
+                            [
+                                f"{svc.get('name', '?')} @ {svc.get('host', '?')}:{svc.get('port', '?')}",
+                                f"reason: {self.stale_threshold} consecutive health-check failures",
+                            ],
+                            kind="warning",
+                        )
                         self.remove_service(service_id)
             time.sleep(self.health_check_interval)

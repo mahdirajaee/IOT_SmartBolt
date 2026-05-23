@@ -9,13 +9,17 @@ from dotenv import load_dotenv
 from service_registry import ServiceRegistry
 from device_manager import DeviceManager
 from config_manager import ConfigurationManager
+from terminal_banner import print_banner
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from internal_auth import resolve_internal_api_key
 
 load_dotenv()
 
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logging.basicConfig(
+    level=getattr(logging, os.environ['LOG_LEVEL']),
+    format='%(asctime)s - %(levelname)s - %(message)s'
+)
 logger = logging.getLogger(__name__)
 
 class CatalogWebService(object):
@@ -23,12 +27,24 @@ class CatalogWebService(object):
     exposed = True
 
     def __init__(self):
-        catalog_file = os.getenv('CATALOG_DATA_FILE', 'catalog.json')
-        self.device_manager = DeviceManager(data_file=catalog_file)
+        catalog_file = os.environ['CATALOG_DATA_FILE']
+        self.account_manager_url = os.environ['ACCOUNT_MANAGER_URL']
+        self.http_timeout = int(os.environ['HTTP_TIMEOUT'])
+        self.internal_api_key = resolve_internal_api_key("catalog")
+        self.device_manager = DeviceManager(
+            data_file=catalog_file,
+            account_manager_url=self.account_manager_url,
+            internal_api_key=self.internal_api_key,
+        )
         self.service_registry = ServiceRegistry(device_manager=self.device_manager)
         self.config_manager = ConfigurationManager()
-        self.account_manager_url = os.getenv("ACCOUNT_MANAGER_URL", "http://localhost:8084")
-        self.internal_api_key = resolve_internal_api_key("catalog")
+        self.service_registry.register_service(
+            service_name="catalog",
+            host=os.environ['CHERRYPY_HOST'],
+            port=int(os.environ['CHERRYPY_PORT']),
+            health_endpoint="/health",
+            description="Service registry and discovery",
+        )
         self.service_registry.start_health_checks()
 
     def json_response(self, data):
@@ -43,13 +59,20 @@ class CatalogWebService(object):
                 f"{self.account_manager_url}/internal/{endpoint}",
                 params=params,
                 headers=self._internal_auth_headers(),
-                timeout=5
+                timeout=self.http_timeout
             )
             if response.status_code == 200:
                 return response.json()
+            cherrypy.response.status = response.status_code
             return {"error": f"Account manager returned {response.status_code}"}
         except Exception as e:
             logger.error(f"Failed to proxy to account manager: {e}")
+            print_banner(
+                "ACCOUNT MANAGER UNREACHABLE",
+                [self.account_manager_url, f"reason: {e}"],
+                kind="danger",
+            )
+            cherrypy.response.status = 502
             return {"error": "Account manager unavailable"}
 
     def GET(self, *path, **query):
@@ -61,8 +84,7 @@ class CatalogWebService(object):
                     "endpoints": {
                         "services": {
                             "list_and_health": "GET /services",
-                            "register": "POST /services/register",
-                            "deregister": "DELETE /services/{id}"
+                            "register": "POST /services/register"
                         },
                         "pipelines": {
                             "list": "GET /pipelines",
@@ -158,11 +180,8 @@ class CatalogWebService(object):
                         "control_rules": self.config_manager.get_control_rules(rule_name)
                     })
                 else:
-                    return self.json_response({
-                        "global_config": self.config_manager.get_global_config(),
-                        "thresholds": self.config_manager.get_thresholds(),
-                        "control_rules": self.config_manager.get_control_rules()
-                    })
+                    cherrypy.response.status = 400
+                    return self.json_response({"error": "Use /config?section=global|thresholds|rules"})
 
             else:
                 cherrypy.response.status = 404
@@ -320,15 +339,52 @@ class CatalogWebService(object):
                                 f"{self.account_manager_url}/internal/users/{user_id}",
                                 json={"telegram_chat_id": str(chat_id)},
                                 headers=self._internal_auth_headers(),
-                                timeout=5
+                                timeout=self.http_timeout
                             )
                             if resp.status_code == 200:
                                 return self.json_response({"message": "User updated", "userID": user_id})
+                            cherrypy.response.status = resp.status_code
                             return self.json_response({"error": f"Account manager returned {resp.status_code}"})
                         except Exception as e:
                             logger.error(f"Failed to proxy PUT user: {e}")
+                            print_banner(
+                                "ACCOUNT MANAGER UNREACHABLE",
+                                [self.account_manager_url, f"reason: {e}"],
+                                kind="danger",
+                            )
+                            cherrypy.response.status = 502
                             return self.json_response({"error": "Account manager unavailable"})
                     return self.json_response({"error": "No valid updates"})
+
+            elif resource == "sectors":
+                if len(path) == 3 and path[2] == "owner":
+                    provided_key = cherrypy.request.headers.get("X-Internal-API-Key")
+                    if provided_key != self.internal_api_key:
+                        print_banner(
+                            "INTERNAL AUTH FAILED",
+                            [
+                                f"path: PUT /sectors/{path[1]}/owner",
+                                f"from: {cherrypy.request.remote.ip if hasattr(cherrypy.request, 'remote') else '?'}",
+                                f"reason: {'missing key' if not provided_key else 'bad key'}",
+                            ],
+                            kind="warning",
+                        )
+                        cherrypy.response.status = 401
+                        return self.json_response({"error": "internal auth required"})
+
+                    sector_id = path[1]
+                    user_id = input_data.get("user_id", "")
+                    chat_id = input_data.get("chat_id") if "chat_id" in input_data else None
+                    success = self.device_manager.assign_sector_owner(sector_id, user_id, chat_id)
+                    if success:
+                        return self.json_response({
+                            "message": "Sector owner assigned",
+                            "sectorID": sector_id,
+                            "userID": "" if user_id in ("", None) else str(user_id),
+                            "chatID": chat_id if chat_id is not None else None
+                        })
+                    cherrypy.response.status = 400
+                    return self.json_response({"error": "sector_id required"})
 
             else:
                 cherrypy.response.status = 404
@@ -347,6 +403,30 @@ class CatalogWebService(object):
 
             resource = path[0]
 
+            if resource == "sectors" and len(path) >= 3 and path[1] == "by-owner":
+                try:
+                    owner_id = int(path[2])
+                except ValueError:
+                    cherrypy.response.status = 400
+                    return self.json_response({"error": "owner ID must be integer"})
+
+                provided_key = cherrypy.request.headers.get("X-Internal-API-Key")
+                if provided_key != self.internal_api_key:
+                    print_banner(
+                        "INTERNAL AUTH FAILED",
+                        [
+                            f"path: DELETE /sectors/by-owner/{owner_id}",
+                            f"from: {cherrypy.request.remote.ip if hasattr(cherrypy.request, 'remote') else '?'}",
+                            f"reason: {'missing key' if not provided_key else 'bad key'}",
+                        ],
+                        kind="warning",
+                    )
+                    cherrypy.response.status = 401
+                    return self.json_response({"error": "internal auth required"})
+
+                result = self.device_manager.remove_sectors_by_owner(owner_id)
+                return self.json_response({"message": "Sectors removed", **result})
+
             if resource == "pipelines" and len(path) >= 2:
                 pipeline_id = path[1]
                 success = self.device_manager.remove_pipeline_bundle(pipeline_id)
@@ -359,23 +439,6 @@ class CatalogWebService(object):
                     cherrypy.response.status = 404
                     return self.json_response({"error": f"Pipeline bundle '{pipeline_id}' not found"})
 
-            elif resource == "services" and len(path) >= 2:
-                service_id = path[1]
-                removed = self.service_registry.remove_service(service_id)
-                if removed:
-                    return self.json_response({
-                        "message": "Service removed successfully",
-                        "service_id": removed["service_id"],
-                        "service_name": removed["name"]
-                    })
-                if self.device_manager.remove_service_from_catalog(service_id):
-                    return self.json_response({
-                        "message": "Service catalog entry removed successfully",
-                        "service_id": service_id
-                    })
-                cherrypy.response.status = 404
-                return self.json_response({"error": f"Service '{service_id}' not found"})
-
             else:
                 cherrypy.response.status = 404
                 return self.json_response({"error": f"DELETE not supported for resource '{resource}'"})
@@ -386,8 +449,8 @@ class CatalogWebService(object):
             return self.json_response({"error": str(e)})
 
 def main():
-    port = int(os.getenv("CHERRYPY_PORT_CATALOG", os.getenv("CHERRYPY_PORT", 8081)))
-    host = os.getenv("CHERRYPY_HOST_CATALOG", os.getenv("CHERRYPY_HOST", "0.0.0.0"))
+    port = int(os.environ["CHERRYPY_PORT"])
+    host = os.environ["CHERRYPY_HOST"]
 
     cherrypy.config.update({
         'server.socket_host': host,
@@ -401,14 +464,23 @@ def main():
             'tools.response_headers.on': True,
             'tools.response_headers.headers': [
                 ('Content-Type', 'application/json'),
-                ('Access-Control-Allow-Origin', '*'),
-                ('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE'),
-                ('Access-Control-Allow-Headers', 'Content-Type')
+                ('Access-Control-Allow-Origin', os.environ['CORS_ALLOW_ORIGIN']),
+                ('Access-Control-Allow-Methods', os.environ['CORS_ALLOW_METHODS']),
+                ('Access-Control-Allow-Headers', os.environ['CORS_ALLOW_HEADERS'])
             ]
         }
     }
 
     logger.info(f"Starting Catalog service on {host}:{port}")
+    print_banner(
+        "CATALOG SERVICE STARTED",
+        [
+            f"Listening on http://{host}:{port}",
+            f"Catalog file: {os.environ['CATALOG_DATA_FILE']}",
+            "Health monitoring: enabled",
+        ],
+        kind="info",
+    )
     cherrypy.quickstart(CatalogWebService(), '/', app_config)
 
 if __name__ == "__main__":
