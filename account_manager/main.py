@@ -152,6 +152,14 @@ class AccountManagerWebService(object):
             )
             cherrypy.response.status = 401
             return False, self.json_response({"error": "Internal authentication required"}, 401)
+        print_banner(
+            "INTERNAL API CALL",
+            [
+                f"path: {cherrypy.request.method} {cherrypy.request.path_info}",
+                f"from: {cherrypy.request.remote.ip if hasattr(cherrypy.request, 'remote') else '?'}",
+            ],
+            kind="info",
+        )
         return True, None
     
     def GET(self, *path, **query):
