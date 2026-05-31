@@ -18,8 +18,8 @@ load_dotenv(Path(__file__).resolve().with_name(".env"))
 from mqtt_subscriber import MQTTSubscriber
 from influxdb3_storage import InfluxDB3Storage
 
-if platform.system() == "Windows":
-    os.environ["GRPC_DEFAULT_SSL_ROOTS_FILE_PATH"] = r"C:\certs\cacert.pem"
+# if platform.system() == "Windows":
+#     os.environ["GRPC_DEFAULT_SSL_ROOTS_FILE_PATH"] = r"C:\certs\cacert.pem"
 
 logging.basicConfig(
     level=getattr(logging, os.environ["LOG_LEVEL"]),

@@ -275,6 +275,7 @@ class Pipeline:
     def set_valve_state(self, valve_id: str, state: str) -> bool:
         if valve_id in self.valves:
             return self.valves[valve_id].set_state(state)
+        logger.error(f"Valve {valve_id} not found in pipeline {self.pipeline_id}")
         return False
 
     def get_info(self) -> Dict[str, Any]:

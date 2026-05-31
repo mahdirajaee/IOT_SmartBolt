@@ -118,14 +118,16 @@ class SensorSimulator:
 
             if success:
                 self.stats["successful_publishes"] += 1
-                logger.info(f"Published data for pipeline {pipeline_id}")
-
+                # logger.info(f"Published data for pipeline {pipeline_id}")
+                
+                bolt_info = []
                 for bolt_id, bolt_data in data.get("bolt_data", {}).items():
-                    self.pipeline_manager.update_catalog_bolt_status(
-                        bolt_id,
-                        bolt_data.get("temperature"),
-                        bolt_data.get("pressure")
-                    )
+                    temp = bolt_data.get("temperature")
+                    pres =  bolt_data.get("pressure")
+                    bolt_info.append(f"{bolt_id}: {temp:.2f} °C, {pres:.2f} PSI")
+                    self.pipeline_manager.update_catalog_bolt_status(bolt_id, temp, pres)
+
+                logger.info(f"Published data for pipeline {pipeline_id} - " + " | ".join(bolt_info))
 
                 for valve_id, valve_data in data.get("valve_status", {}).items():
                     valve_state = valve_data.get("state") if isinstance(valve_data, dict) else valve_data

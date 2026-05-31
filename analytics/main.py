@@ -173,7 +173,7 @@ class AnalyticsWebService(object):
             if device_id.startswith("bolt_"):
                 if device_id not in bolts:
                     bolts[device_id] = {}
-                bolts[device_id][field] = entry.get("v")
+                bolts[device_id][field] = entry.get("v", entry.get("vb", entry.get("vs")))
 
         return pipeline_id, sector_id, bt, bolts
 
@@ -191,20 +191,22 @@ class AnalyticsWebService(object):
                     if temperature is None and pressure is None:
                         continue
 
-                    logger.info(f"MQTT data received: {pipeline_id}/{bolt_id} - T:{temperature}°C P:{pressure}PSI")
+                    logger.info(f"MQTT data received: {pipeline_id}/{bolt_id} - T:{temperature:.2f}°C P:{pressure:.2f}PSI")
                     self._analyze_realtime(pipeline_id, bolt_id, sector_id, temperature, pressure, timestamp)
         except Exception as e:
             logger.error(f"MQTT message error: {e}")
 
     def _analyze_realtime(self, pipeline_id, bolt_id, sector_id, temp, pressure, timestamp):
-        if temp > self.thresholds["temperature"]["critical"]:
-            self._store_alert({"pipeline_id": pipeline_id, "bolt_id": bolt_id, "sector_id": sector_id, "anomaly_type": "threshold_exceeded", "severity": "critical", "sensor_type": "temperature", "value": temp, "message": f"Temperature {temp:.1f}°C critical", "timestamp": timestamp})
-        elif temp > self.thresholds["temperature"]["alert"]:
-            self._store_alert({"pipeline_id": pipeline_id, "bolt_id": bolt_id, "sector_id": sector_id, "anomaly_type": "threshold_warning", "severity": "warning", "sensor_type": "temperature", "value": temp, "message": f"Temperature {temp:.1f}°C warning", "timestamp": timestamp})
-        if pressure > self.thresholds["pressure"]["critical"]:
-            self._store_alert({"pipeline_id": pipeline_id, "bolt_id": bolt_id, "sector_id": sector_id, "anomaly_type": "threshold_exceeded", "severity": "critical", "sensor_type": "pressure", "value": pressure, "message": f"Pressure {pressure:.1f} PSI critical", "timestamp": timestamp})
-        elif pressure > self.thresholds["pressure"]["alert"]:
-            self._store_alert({"pipeline_id": pipeline_id, "bolt_id": bolt_id, "sector_id": sector_id, "anomaly_type": "threshold_warning", "severity": "warning", "sensor_type": "pressure", "value": pressure, "message": f"Pressure {pressure:.1f} PSI warning", "timestamp": timestamp})
+        if temp is not None:
+            if temp > self.thresholds["temperature"]["critical"]:
+                self._store_alert({"pipeline_id": pipeline_id, "bolt_id": bolt_id, "sector_id": sector_id, "anomaly_type": "threshold_exceeded", "severity": "critical", "sensor_type": "temperature", "value": temp, "message": f"Temperature {temp:.1f}°C critical", "timestamp": timestamp})
+            elif temp > self.thresholds["temperature"]["alert"]:
+                self._store_alert({"pipeline_id": pipeline_id, "bolt_id": bolt_id, "sector_id": sector_id, "anomaly_type": "threshold_warning", "severity": "warning", "sensor_type": "temperature", "value": temp, "message": f"Temperature {temp:.1f}°C warning", "timestamp": timestamp})
+        if pressure is not None:
+            if pressure > self.thresholds["pressure"]["critical"]:
+                self._store_alert({"pipeline_id": pipeline_id, "bolt_id": bolt_id, "sector_id": sector_id, "anomaly_type": "threshold_exceeded", "severity": "critical", "sensor_type": "pressure", "value": pressure, "message": f"Pressure {pressure:.1f} PSI critical", "timestamp": timestamp})
+            elif pressure > self.thresholds["pressure"]["alert"]:
+                self._store_alert({"pipeline_id": pipeline_id, "bolt_id": bolt_id, "sector_id": sector_id, "anomaly_type": "threshold_warning", "severity": "warning", "sensor_type": "pressure", "value": pressure, "message": f"Pressure {pressure:.1f} PSI warning", "timestamp": timestamp})
 
     def start_mqtt_subscriber(self):
         try:

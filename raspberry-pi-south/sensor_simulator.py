@@ -120,14 +120,16 @@ class SensorSimulator:
 
             if success:
                 self.stats["successful_publishes"] += 1
-                logger.info(f"Published data for pipeline {pipeline_id}")
-
+                
+                # logger.info(f"Published data for pipeline {pipeline_id}")
+                bolt_info = []
                 for bolt_id, bolt_data in data.get("bolt_data", {}).items():
-                    self.pipeline_manager.update_catalog_bolt_status(
-                        bolt_id,
-                        bolt_data.get("temperature"),
-                        bolt_data.get("pressure")
-                    )
+                    temp = bolt_data.get("temperature")
+                    pres =  bolt_data.get("pressure")
+                    bolt_info.append(f"{bolt_id}: {temp:.2f} °C, {pres:.2f} PSI")
+                    self.pipeline_manager.update_catalog_bolt_status(bolt_id, temp, pres)
+
+                logger.info(f"Published data for pipeline {pipeline_id} - " + " | ".join(bolt_info))
 
                 for valve_id, valve_data in data.get("valve_status", {}).items():
                     valve_state = valve_data.get("state") if isinstance(valve_data, dict) else valve_data
@@ -136,42 +138,41 @@ class SensorSimulator:
                 self.stats["failed_publishes"] += 1
 
             self.stats["total_messages"] += 1
-            
-    
+
     def _handle_valve_command(self, topic: str, payload: Dict[str, Any]):
         try:
             pipeline_id = payload.get("pipeline_id")
             valve_id = payload.get("valve_id")
             command = payload.get("command")
-            
+
             if not all([pipeline_id, valve_id, command]):
                 logger.warning(f"Invalid valve command: {payload}")
                 return
-            
+
             if command not in ["open", "close"]:
                 logger.warning(f"Invalid valve command: {command}")
                 return
 
             normalized_command = "closed" if command == "close" else command
             success = self.pipeline_manager.set_valve_state(pipeline_id, valve_id, normalized_command)
-            
+
             if success:
                 self.stats["valve_commands_received"] += 1
                 color = RED if command == "open" else GREEN
                 logger.info(f"{color}Valve {valve_id} in pipeline {pipeline_id} set to {command}{RESET}")
             else:
                 logger.error(f"Failed to set valve {valve_id} in pipeline {pipeline_id}")
-                
-                self.mqtt_publisher.publish_event("valve_changed", {
-                    "pipeline_id": pipeline_id,
-                    "valve_id": valve_id,
-                    "state": command,
-                    "success": True
-                })
-                
+
+            self.mqtt_publisher.publish_event("valve_changed", {
+                "pipeline_id": pipeline_id,
+                "valve_id": valve_id,
+                "state": normalized_command,
+                "success": success
+            })
+
         except Exception as e:
             logger.error(f"Error handling valve command: {e}")
-    
+
     def _on_config_change(self, config: Dict[str, Any]):
         logger.info("Pipeline configuration changed")
 
