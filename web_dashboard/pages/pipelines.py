@@ -17,18 +17,12 @@ def create_layout(service_client):
                         "Pipeline Monitoring"
                     ], className="mb-1", style={'fontWeight': '700', 'color': '#ecf5ff'}),
                     html.P(
-                        "Stay on top of each pipeline with real-time health, flow, and component visibility.",
+                        "Stay on top of each pipeline's health, flow, and component visibility.",
                         className="mb-2",
                         style={'color': 'rgba(236,245,255,0.8)'}
                     ),
                     html.Div([
-                        dbc.Badge("Live feed", color="success", className="me-2", pill=True),
-                        dbc.Badge(
-                            f"Auto refresh · {refresh_seconds}s",
-                            color="info",
-                            pill=True,
-                            style={'backgroundColor': 'rgba(255,255,255,0.12)'}
-                        )
+                        dbc.Badge(f"Polled · {refresh_seconds}s", color="success", pill=True)
                     ])
                 ], className="flex-grow-1"),
                 html.Div([
@@ -65,20 +59,8 @@ def create_layout(service_client):
                                 className="mb-0",
                                 style={'color': '#6b7280', 'fontSize': '0.9rem'}
                             )
-                        ], className="flex-grow-1"),
-                        html.Div([
-                            html.Div(
-                                style={
-                                    'width': '10px',
-                                    'height': '10px',
-                                    'borderRadius': '50%',
-                                    'backgroundColor': '#22c55e'
-                                },
-                                className="me-2"
-                            ),
-                            html.Small("Live", style={'color': '#16a34a', 'fontWeight': '700'})
-                        ], className="d-flex align-items-center")
-                    ], className="d-flex align-items-start justify-content-between mb-3 gap-2"),
+                        ], className="flex-grow-1")
+                    ], className="d-flex align-items-start mb-3 gap-2"),
                     dbc.Row([
                         dbc.Col([
                             html.Div([
@@ -164,30 +146,6 @@ def create_layout(service_client):
                 })
             ], md=6, className="mb-4")
         ], className="g-3"),
-
-        html.Div([
-            html.Div([
-                html.Div([
-                    html.Div([
-                        html.Div(
-                            style={'width': '10px', 'height': '34px', 'borderRadius': '6px', 'background': 'linear-gradient(180deg, #0f3b63, #22c55e)'},
-                            className="me-3"
-                        ),
-                        html.Div([
-                            html.Div("Health Assessment", style={'fontWeight': '700', 'color': '#0b1b2d'}),
-                            html.Div("Risk outlook and resilience score", style={'color': '#6b7280', 'fontSize': '0.9rem'})
-                        ])
-                    ], className="d-flex align-items-center mb-3")
-                ]),
-                html.Div(id="pipeline-health")
-            ], style={'padding': '1.5rem'})
-        ], style={
-            'backgroundColor': '#ffffff',
-            'borderRadius': '14px',
-            'boxShadow': '0 12px 28px rgba(12,23,42,0.08)',
-            'border': '1px solid #e6ecf5',
-            'marginBottom': '1.5rem'
-        }),
 
         dcc.Interval(
             id='pipelines-interval',
@@ -506,52 +464,3 @@ def register_callbacks(app, service_client):
         )
 
         return temp_fig, pressure_fig
-
-    @app.callback(
-        Output('pipeline-health', 'children'),
-        [Input('pipeline-selector', 'value'),
-         Input('pipelines-interval', 'n_intervals')]
-    )
-    def update_pipeline_health(pipeline_id, n):
-        if not pipeline_id:
-            return html.P("Select a pipeline to view health assessment", className="text-muted")
-
-        health = service_client.get_pipeline_health(pipeline_id)
-
-        if not health:
-            return html.P("Health data not available", className="text-muted")
-
-        health_score = health.get('health_score', 0)
-        risk_level = health.get('risk_level', 'unknown')
-        risk_factors = health.get('risk_factors', [])
-
-        if risk_level == 'high':
-            color = 'danger'
-        elif risk_level == 'medium':
-            color = 'warning'
-        else:
-            color = 'success'
-
-        return html.Div([
-            dbc.Row([
-                dbc.Col([
-                    html.H4("Health Score"),
-                    dbc.Progress(
-                        value=health_score,
-                        label=f"{health_score}%",
-                        color=color,
-                        style={"height": "30px"},
-                        className="mb-3"
-                    )
-                ], md=8),
-                dbc.Col([
-                    html.H4("Risk Level"),
-                    dbc.Badge(risk_level.upper(), color=color, className="fs-3")
-                ], md=4, className="text-center")
-            ]),
-            html.Hr(),
-            html.H5("Risk Factors"),
-            html.Ul([
-                html.Li(factor.get('factor') if isinstance(factor, dict) else factor) for factor in risk_factors
-            ]) if risk_factors else html.P("No risk factors detected", className="text-muted")
-        ])

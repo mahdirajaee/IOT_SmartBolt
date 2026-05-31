@@ -27,7 +27,7 @@ def create_layout(service_client, auth_token):
                     ),
                     html.Div([
                         dbc.Badge("Critical path", color="danger", className="me-2", pill=True),
-                        dbc.Badge(f"Auto refresh · {refresh_seconds}s", color="warning", pill=True,
+                        dbc.Badge(f"Polled · {refresh_seconds}s", color="warning", pill=True,
                                   style={'backgroundColor': 'rgba(255,255,255,0.14)', 'color': '#fff7ed'})
                     ])
                 ], className="flex-grow-1"),
@@ -78,15 +78,8 @@ def create_layout(service_client, auth_token):
                                 className="mb-0",
                                 style={'color': '#6b7280', 'fontSize': '0.9rem'}
                             )
-                        ], className="flex-grow-1"),
-                        html.Div([
-                            html.Div(
-                                style={'width': '10px', 'height': '10px', 'borderRadius': '50%', 'backgroundColor': '#22c55e'},
-                                className="me-2"
-                            ),
-                            html.Small("Live", style={'color': '#16a34a', 'fontWeight': '700'})
-                        ], className="d-flex align-items-center")
-                    ], className="d-flex align-items-start justify-content-between mb-3 gap-2"),
+                        ], className="flex-grow-1")
+                    ], className="d-flex align-items-start mb-3 gap-2"),
                     dbc.Row([
                         dbc.Col([
                             html.Div([
@@ -144,7 +137,7 @@ def create_layout(service_client, auth_token):
                             size="lg",
                             className="w-100 mb-2"
                         ),
-                        html.Small("Closes all valves in all pipelines", className="text-muted")
+                        html.Small("Opens (vents) all valves in all pipelines", className="text-muted")
                     ], style={'padding': '1.25rem 1.5rem 1.5rem'})
                 ], style={
                     'backgroundColor': '#ffffff',
@@ -285,10 +278,7 @@ def register_callbacks(app, service_client):
 
         pipeline = service_client.get_pipeline(pipeline_id)
         if not pipeline:
-            return (
-                html.P("Pipeline data not available", className="text-danger"),
-                html.P("Unable to load valve controls", className="text-danger text-center")
-            )
+            return dash.no_update, dash.no_update
 
         status = pipeline.get('status', 'unknown')
         status_color = 'success' if status == 'active' else 'danger'
@@ -385,7 +375,7 @@ def register_callbacks(app, service_client):
 
         triggered_value = ctx.triggered[0]['value']
         if triggered_value is None or triggered_value == 0:
-            return False, "", None
+            return dash.no_update, dash.no_update, dash.no_update
 
         triggered_id = ctx.triggered[0]['prop_id'].split('.')[0]
 
@@ -436,14 +426,14 @@ def register_callbacks(app, service_client):
             print_banner(
                 "EMERGENCY SHUTDOWN REQUESTED",
                 [
-                    "all valves will close across all pipelines if confirmed",
+                    "all valves will open (vent) across all pipelines if confirmed",
                     "awaiting user confirmation",
                 ],
                 kind="danger",
             )
             message = html.Div([
                 html.H5("⚠️ EMERGENCY SHUTDOWN ⚠️", className="text-danger"),
-                html.P("This will immediately close ALL valves in ALL pipelines!"),
+                html.P("This will immediately open (vent) ALL valves in ALL pipelines to relieve pressure."),
                 html.P("This action should only be used in emergency situations.", className="text-muted")
             ])
             action_data = {
@@ -577,7 +567,7 @@ def execute_valve_control(action_data, auth_token, service_client):
                 print_banner(
                     "EMERGENCY SHUTDOWN ACTIVATED",
                     [
-                        "system-wide valve closure dispatched",
+                        "venting all valves to relieve pressure",
                         f"target:   all valves across all sectors",
                     ],
                     kind="danger",

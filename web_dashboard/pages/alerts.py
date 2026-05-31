@@ -21,13 +21,7 @@ def create_layout(service_client):
                         style={'color': 'rgba(255,247,237,0.8)'}
                     ),
                     html.Div([
-                        dbc.Badge("Live feed", color="danger", className="me-2", pill=True),
-                        dbc.Badge(
-                            f"Auto refresh · {refresh_seconds}s",
-                            color="warning",
-                            pill=True,
-                            style={'backgroundColor': 'rgba(255,255,255,0.14)', 'color': '#fff7ed'}
-                        )
+                        dbc.Badge(f"Polled · {refresh_seconds}s", color="danger", pill=True)
                     ])
                 ], className="flex-grow-1"),
                 html.Div([
@@ -64,20 +58,8 @@ def create_layout(service_client):
                                 className="mb-0",
                                 style={'color': '#6b7280', 'fontSize': '0.9rem'}
                             )
-                        ], className="flex-grow-1"),
-                        html.Div([
-                            html.Div(
-                                style={
-                                    'width': '10px',
-                                    'height': '10px',
-                                    'borderRadius': '50%',
-                                    'backgroundColor': '#ef4444'
-                                },
-                                className="me-2"
-                            ),
-                            html.Small("Live", style={'color': '#b91c1c', 'fontWeight': '700'})
-                        ], className="d-flex align-items-center")
-                    ], className="d-flex align-items-start justify-content-between mb-3 gap-2"),
+                        ], className="flex-grow-1")
+                    ], className="d-flex align-items-start mb-3 gap-2"),
                     dbc.Row([
                         dbc.Col([
                             html.Div([

@@ -3,7 +3,92 @@ from dash.exceptions import PreventUpdate
 import dash_bootstrap_components as dbc
 import plotly.graph_objs as go
 from datetime import datetime
+import hashlib
 import os
+
+
+_PIPELINE_PALETTE = [
+    '#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd',
+    '#8c564b', '#e377c2', '#17becf', '#bcbd22', '#7f7f7f',
+]
+
+_SECTOR_LABELS = {
+    'sector-north': 'North',
+    'sector-south': 'South',
+}
+
+
+def _pipeline_color(pipeline_id):
+    digest = hashlib.md5(str(pipeline_id).encode()).hexdigest()
+    return _PIPELINE_PALETTE[int(digest, 16) % len(_PIPELINE_PALETTE)]
+
+
+def _percentile_range(values, lo_pct=0.02, hi_pct=0.98, pad_ratio=0.15, min_pad=1.0):
+    finite = sorted(v for v in values if v is not None)
+    if len(finite) < 2:
+        return None
+    n = len(finite)
+    lo = finite[max(0, int(n * lo_pct))]
+    hi = finite[min(n - 1, int(n * hi_pct))]
+    pad = max((hi - lo) * pad_ratio, min_pad)
+    return [lo - pad, hi + pad]
+
+
+def _build_overview_chart(data_by_pid, sector_by_pid, y_title, fallback_range):
+    fig = go.Figure()
+    all_values = []
+
+    for pid in sorted(data_by_pid.keys()):
+        points = sorted(data_by_pid[pid], key=lambda d: d.get('timestamp') or '')
+        if not points:
+            continue
+        xs = [d.get('timestamp') for d in points]
+        ys = [d.get('value') for d in points]
+        all_values.extend(v for v in ys if v is not None)
+
+        sector_id = sector_by_pid.get(pid)
+        sector_label = _SECTOR_LABELS.get(sector_id, sector_id or '—')
+        trace_name = f"Pipeline {pid} ({sector_label})"
+
+        fig.add_trace(go.Scatter(
+            x=xs,
+            y=ys,
+            mode='lines',
+            name=trace_name,
+            line=dict(color=_pipeline_color(pid), width=2),
+            hovertemplate='%{y:.1f}<extra>' + trace_name + '</extra>',
+        ))
+
+    yrange = _percentile_range(all_values) or fallback_range
+
+    fig.update_layout(
+        margin=dict(l=40, r=20, t=10, b=40),
+        xaxis_title="Time",
+        yaxis_title=y_title,
+        showlegend=True,
+        legend=dict(
+            orientation='h',
+            yanchor='bottom',
+            y=1.02,
+            xanchor='left',
+            x=0,
+            font=dict(size=10),
+            bgcolor='rgba(0,0,0,0)',
+        ),
+        height=340,
+        plot_bgcolor='rgba(0,0,0,0)',
+        paper_bgcolor='rgba(0,0,0,0)',
+        font=dict(color='#2c3e50', size=11),
+        xaxis=dict(showgrid=True, gridcolor='rgba(0,0,0,0.05)', zeroline=False),
+        yaxis=dict(
+            showgrid=True,
+            gridcolor='rgba(0,0,0,0.05)',
+            zeroline=False,
+            range=yrange,
+        ),
+        hovermode='x unified',
+    )
+    return fig
 
 
 def create_layout(service_client):
@@ -230,79 +315,24 @@ def register_callbacks(app, service_client):
          Input('overview-sector-filter', 'value')]
     )
     def update_charts(n, sector_filter):
-        temp_data = []
-        pressure_data = []
         # Iterate per-pipeline (even on "All Sectors") so we never pull data for
         # pipelines that are no longer in the catalog. 1h window keeps the chart
         # immune to leftover writes from prior runs.
         sector_pipelines = service_client.get_pipelines_by_sector(sector_filter)
+
+        temp_by_pid = {}
+        pressure_by_pid = {}
+        sector_by_pid = {}
         for p in sector_pipelines:
-            temp_data.extend(service_client.get_sensor_data('temperature', pipeline_id=p['pipeline_id'], hours=1))
-            pressure_data.extend(service_client.get_sensor_data('pressure', pipeline_id=p['pipeline_id'], hours=1))
+            pid = p['pipeline_id']
+            sector_by_pid[pid] = p.get('location', {}).get('sector')
+            for d in service_client.get_sensor_data('temperature', pipeline_id=pid, hours=1):
+                temp_by_pid.setdefault(pid, []).append(d)
+            for d in service_client.get_sensor_data('pressure', pipeline_id=pid, hours=1):
+                pressure_by_pid.setdefault(pid, []).append(d)
 
-        temp_fig = go.Figure()
-        if temp_data:
-            temp_fig.add_trace(go.Scatter(
-                x=[d['timestamp'] for d in temp_data],
-                y=[d['value'] for d in temp_data],
-                mode='lines',
-                name='Temperature',
-                line=dict(color='#ff7f0e')
-            ))
-        temp_fig.update_layout(
-            margin=dict(l=40, r=20, t=20, b=40),
-            xaxis_title="Time",
-            yaxis_title="Temperature (°C)",
-            showlegend=False,
-            height=300,
-            plot_bgcolor='rgba(0,0,0,0)',
-            paper_bgcolor='rgba(0,0,0,0)',
-            font=dict(color='#2c3e50', size=11),
-            xaxis=dict(
-                showgrid=True,
-                gridcolor='rgba(0,0,0,0.05)',
-                zeroline=False
-            ),
-            yaxis=dict(
-                showgrid=True,
-                gridcolor='rgba(0,0,0,0.05)',
-                zeroline=False
-            ),
-            hovermode='x unified'
-        )
-
-        pressure_fig = go.Figure()
-        if pressure_data:
-            pressure_fig.add_trace(go.Scatter(
-                x=[d['timestamp'] for d in pressure_data],
-                y=[d['value'] for d in pressure_data],
-                mode='lines',
-                name='Pressure',
-                line=dict(color='#4ECDC4', width=2),
-                fill='tozeroy',
-                fillcolor='rgba(78, 205, 196, 0.1)'
-            ))
-        pressure_fig.update_layout(
-            margin=dict(l=40, r=20, t=20, b=40),
-            xaxis_title="Time",
-            yaxis_title="Pressure (PSI)",
-            showlegend=False,
-            height=300,
-            plot_bgcolor='rgba(0,0,0,0)',
-            paper_bgcolor='rgba(0,0,0,0)',
-            font=dict(color='#2c3e50', size=11),
-            xaxis=dict(
-                showgrid=True,
-                gridcolor='rgba(0,0,0,0.05)',
-                zeroline=False
-            ),
-            yaxis=dict(
-                showgrid=True,
-                gridcolor='rgba(0,0,0,0.05)',
-                zeroline=False
-            ),
-            hovermode='x unified'
-        )
+        temp_fig = _build_overview_chart(temp_by_pid, sector_by_pid, "Temperature (°C)", [15, 50])
+        pressure_fig = _build_overview_chart(pressure_by_pid, sector_by_pid, "Pressure (PSI)", [60, 130])
 
         return temp_fig, pressure_fig
 
