@@ -1,128 +1,91 @@
 {
   "projectOwner": "Mahdi Rajaee, Mohammad Eftekharipour, Tanin Heidarloui Moghaddam",
   "projectName": "IoT Pipeline Monitoring System",
-  "lastUpdate": "2026-04-30 11:24",
+  "lastUpdate": "2026-05-30 23:35",
   "broker": {
     "IP": "localhost",
     "port": 1883
   },
   "servicesList": [
     {
-      "serviceID": "resource_catalog",
+      "serviceID": "catalog",
       "REST_endpoint": "http://localhost:8081",
       "MQTT_topic": "",
-      "timestamp": ""
+      "timestamp": "2026-05-29 05:59"
     },
     {
-      "serviceID": "analytics",
-      "REST_endpoint": "http://localhost:8083",
-      "MQTT_topic": "sectors/+/pipelines/+/measurements,sectors/+/pipelines/+/alerts/+",
-      "timestamp": "2026-04-30 10:56"
-    },
-    {
-      "serviceID": "control_center",
-      "REST_endpoint": "http://localhost:8085",
-      "MQTT_topic": "sectors/+/pipelines/+/commands/valves,telegram/commands/+",
-      "timestamp": "2026-04-30 11:24"
-    },
-    {
-      "serviceID": "raspberry_pi_north",
-      "REST_endpoint": "http://localhost:8086",
-      "MQTT_topic": "sectors/sector-north/pipelines/+/measurements,sectors/sector-north/pipelines/+/commands/valves",
-      "timestamp": "2026-04-30 10:56"
-    },
-    {
-      "serviceID": "telegram_bot",
-      "REST_endpoint": "http://localhost:8087",
-      "MQTT_topic": "sectors/+/pipelines/+/alerts/+,alerts/anomalies/+,telegram/commands/+",
-      "timestamp": "2026-04-30 10:57"
+      "serviceID": "timeseries_db",
+      "REST_endpoint": "http://localhost:8082",
+      "MQTT_topic": "",
+      "timestamp": "2026-05-29 05:59"
     },
     {
       "serviceID": "raspberry_pi_south",
       "REST_endpoint": "http://localhost:8088",
-      "MQTT_topic": "sectors/sector-south/pipelines/+/measurements,sectors/sector-south/pipelines/+/commands/valves",
-      "timestamp": "2026-04-30 10:56"
-    },
-    {
-      "serviceID": "message_broker",
-      "REST_endpoint": "http://localhost:8089",
-      "MQTT_topic": "sectors/+/pipelines/+/#,telegram/commands/+,alerts/anomalies/+",
-      "timestamp": "2026-04-30 10:55"
-    },
-    {
-      "serviceID": "test_service",
-      "REST_endpoint": "http://localhost:9999",
       "MQTT_topic": "",
-      "timestamp": "2026-04-09 11:40"
+      "timestamp": "2026-05-29 05:59"
+    },
+    {
+      "serviceID": "analytics",
+      "REST_endpoint": "http://localhost:8083",
+      "MQTT_topic": "",
+      "timestamp": "2026-05-29 05:59"
     },
     {
       "serviceID": "account_manager",
       "REST_endpoint": "http://localhost:8084",
       "MQTT_topic": "",
-      "timestamp": "2026-04-30 10:55"
+      "timestamp": "2026-05-29 05:59"
     },
     {
       "serviceID": "web_dashboard",
       "REST_endpoint": "http://127.0.0.1:8090",
       "MQTT_topic": "",
-      "timestamp": "2026-04-30 10:57"
-    }
-  ],
-  "usersList": [
-    {
-      "userName": "admin",
-      "userID": 1,
-      "chatID": 207251107,
-      "passwordHash": "$2b$12$eX4keRD7iN3BmVAo4RPaPuhmcFU1Upp5Tz6dcMgg7uKE63ekqjvOC",
-      "sectors": [
-        {
-          "sectorID": "sector-north"
-        },
-        {
-          "sectorID": "sector-south"
-        }
-      ]
+      "timestamp": "2026-05-29 05:59"
     },
     {
-      "userName": "mahdirj",
-      "userID": 7,
-      "chatID": 207251107,
-      "passwordHash": "$2b$12$AmviPJzIRDliqmEx4cJH0uFAoBUNexX5ZZ1RD/.0UVInm/GxZlVZ2",
-      "sectors": [
-        {
-          "sectorID": "sector-north"
-        }
-      ]
+      "serviceID": "message_broker",
+      "REST_endpoint": "http://localhost:8089",
+      "MQTT_topic": "",
+      "timestamp": "2026-05-29 05:59"
     },
     {
-      "userName": "testuser",
-      "userID": 2,
-      "chatID": null,
-      "passwordHash": "$2b$12$BUUniHL3rgTAE8PPazZCD.pMPnFCGNQ6utdIufhWmr8hbO0X34Uf6",
-      "sectors": [
-        {
-          "sectorID": "sector-south"
-        }
-      ]
+      "serviceID": "control_center",
+      "REST_endpoint": "http://localhost:8085",
+      "MQTT_topic": "",
+      "timestamp": "2026-05-29 05:59"
     },
     {
-      "userName": "test_new_viewer",
-      "userID": 3,
-      "chatID": null,
-      "passwordHash": "$2b$12$U3vsoRlLi1wbmFsEpcozQ.4gyugyDUiTzhsO/p7Y36We47uR2Gln6",
-      "sectors": []
+      "serviceID": "telegram_bot",
+      "REST_endpoint": "http://localhost:8087",
+      "MQTT_topic": "",
+      "timestamp": "2026-05-29 05:59"
+    },
+    {
+      "serviceID": "raspberry_pi_north",
+      "REST_endpoint": "http://localhost:8086",
+      "MQTT_topic": "",
+      "timestamp": "2026-05-29 05:59"
     }
   ],
   "sectorsList": [
     {
-      "userID": 1,
+      "userID": 17,
+      "chatID": "72043102",
       "sectorID": "sector-north",
       "pipelinesList": [
         {
           "pipelineID": "N1",
-          "location": "North Area 1",
-          "description": "Pipeline N1 monitoring system",
+          "name": "pipeline N1 ",
+          "location": "North",
+          "description": "Pipeline N1 - pipeline N1 ",
           "status": "active",
+          "sensor_limits": {
+            "temp_min": 20.0,
+            "temp_max": 50.0,
+            "pressure_min": 80.0,
+            "pressure_max": 120.0
+          },
           "devicesList": [
             {
               "deviceID": "bolt_n1",
@@ -147,7 +110,7 @@
                   "serviceIP": "localhost:8082"
                 }
               ],
-              "lastUpdate": ""
+              "lastUpdate": "2026-05-30 23:35:40"
             },
             {
               "deviceID": "valve_n1",
@@ -166,15 +129,24 @@
                   ]
                 }
               ],
-              "lastUpdate": ""
+              "normallyOpen": false,
+              "currentState": "closed",
+              "lastUpdate": "2026-05-30 23:35:40"
             }
           ]
         },
         {
           "pipelineID": "N2",
-          "location": "North Area 2",
-          "description": "Pipeline N2 monitoring system",
+          "name": "n2",
+          "location": "north",
+          "description": "Pipeline N2 - n2",
           "status": "active",
+          "sensor_limits": {
+            "temp_min": 20.0,
+            "temp_max": 50.0,
+            "pressure_min": 80.0,
+            "pressure_max": 120.0
+          },
           "devicesList": [
             {
               "deviceID": "bolt_n2",
@@ -199,7 +171,7 @@
                   "serviceIP": "localhost:8082"
                 }
               ],
-              "lastUpdate": ""
+              "lastUpdate": "2026-05-30 23:35:40"
             },
             {
               "deviceID": "valve_n2",
@@ -218,15 +190,24 @@
                   ]
                 }
               ],
-              "lastUpdate": ""
+              "normallyOpen": false,
+              "currentState": "closed",
+              "lastUpdate": "2026-05-30 23:35:40"
             }
           ]
         },
         {
-          "pipelineID": "N3",
-          "location": "North Area 3",
-          "description": "Pipeline N3 monitoring system",
+          "pipelineID": "n3",
+          "name": "n3",
+          "location": "north",
+          "description": "Pipeline n3 - n3",
           "status": "active",
+          "sensor_limits": {
+            "temp_min": 20.0,
+            "temp_max": 50.0,
+            "pressure_min": 80.0,
+            "pressure_max": 120.0
+          },
           "devicesList": [
             {
               "deviceID": "bolt_n3",
@@ -243,7 +224,7 @@
                 {
                   "serviceType": "MQTT",
                   "topic": [
-                    "sectors/sector-north/pipelines/N3/measurements"
+                    "sectors/sector-north/pipelines/n3/measurements"
                   ]
                 },
                 {
@@ -251,7 +232,7 @@
                   "serviceIP": "localhost:8082"
                 }
               ],
-              "lastUpdate": ""
+              "lastUpdate": "2026-05-30 23:35:40"
             },
             {
               "deviceID": "valve_n3",
@@ -266,77 +247,35 @@
                 {
                   "serviceType": "MQTT",
                   "topic": [
-                    "sectors/sector-north/pipelines/N3/commands/valves"
+                    "sectors/sector-north/pipelines/n3/commands/valves"
                   ]
                 }
               ],
-              "lastUpdate": ""
-            }
-          ]
-        },
-        {
-          "pipelineID": "N6",
-          "location": "north sector",
-          "description": "north sector",
-          "status": "active",
-          "devicesList": [
-            {
-              "deviceID": "bolt_n6",
-              "deviceName": "Smart Bolt",
-              "measureType": [
-                "Temperature",
-                "Pressure"
-              ],
-              "availableServices": [
-                "MQTT",
-                "REST"
-              ],
-              "servicesDetails": [
-                {
-                  "serviceType": "MQTT",
-                  "topic": [
-                    "sectors/sector-north/pipelines/N6/measurements"
-                  ]
-                },
-                {
-                  "serviceType": "REST",
-                  "serviceIP": "localhost:8082"
-                }
-              ],
-              "lastUpdate": ""
-            },
-            {
-              "deviceID": "valve_n6",
-              "deviceName": "Control Valve",
-              "measureType": [
-                "ValveState"
-              ],
-              "availableServices": [
-                "MQTT"
-              ],
-              "servicesDetails": [
-                {
-                  "serviceType": "MQTT",
-                  "topic": [
-                    "sectors/sector-north/pipelines/N6/commands/valves"
-                  ]
-                }
-              ],
-              "lastUpdate": ""
+              "normallyOpen": false,
+              "currentState": "closed",
+              "lastUpdate": "2026-05-30 23:35:40"
             }
           ]
         }
       ]
     },
     {
-      "userID": 1,
+      "userID": 19,
+      "chatID": "207251107",
       "sectorID": "sector-south",
       "pipelinesList": [
         {
           "pipelineID": "S1",
-          "location": "South Area 1",
-          "description": "Pipeline S1 monitoring system",
+          "name": "s1",
+          "location": "south",
+          "description": "Pipeline S1 - s1",
           "status": "active",
+          "sensor_limits": {
+            "temp_min": 20.0,
+            "temp_max": 50.0,
+            "pressure_min": 80.0,
+            "pressure_max": 120.0
+          },
           "devicesList": [
             {
               "deviceID": "bolt_s1",
@@ -361,7 +300,7 @@
                   "serviceIP": "localhost:8082"
                 }
               ],
-              "lastUpdate": ""
+              "lastUpdate": "2026-05-30 23:35:36"
             },
             {
               "deviceID": "valve_s1",
@@ -380,15 +319,24 @@
                   ]
                 }
               ],
-              "lastUpdate": ""
+              "normallyOpen": false,
+              "currentState": "closed",
+              "lastUpdate": "2026-05-30 23:35:36"
             }
           ]
         },
         {
-          "pipelineID": "S2",
-          "location": "South Area 2",
-          "description": "Pipeline S2 monitoring system",
+          "pipelineID": "s2",
+          "name": "s2",
+          "location": "south",
+          "description": "Pipeline s2 - s2",
           "status": "active",
+          "sensor_limits": {
+            "temp_min": 20.0,
+            "temp_max": 50.0,
+            "pressure_min": 80.0,
+            "pressure_max": 120.0
+          },
           "devicesList": [
             {
               "deviceID": "bolt_s2",
@@ -405,7 +353,7 @@
                 {
                   "serviceType": "MQTT",
                   "topic": [
-                    "sectors/sector-south/pipelines/S2/measurements"
+                    "sectors/sector-south/pipelines/s2/measurements"
                   ]
                 },
                 {
@@ -413,7 +361,7 @@
                   "serviceIP": "localhost:8082"
                 }
               ],
-              "lastUpdate": ""
+              "lastUpdate": "2026-05-30 23:35:36"
             },
             {
               "deviceID": "valve_s2",
@@ -428,19 +376,28 @@
                 {
                   "serviceType": "MQTT",
                   "topic": [
-                    "sectors/sector-south/pipelines/S2/commands/valves"
+                    "sectors/sector-south/pipelines/s2/commands/valves"
                   ]
                 }
               ],
-              "lastUpdate": ""
+              "normallyOpen": false,
+              "currentState": "closed",
+              "lastUpdate": "2026-05-30 23:35:36"
             }
           ]
         },
         {
-          "pipelineID": "S3",
-          "location": "South Area 3",
-          "description": "Pipeline S3 monitoring system",
+          "pipelineID": "s3",
+          "name": "s3",
+          "location": "south3",
+          "description": "Pipeline s3 - s3",
           "status": "active",
+          "sensor_limits": {
+            "temp_min": 20.0,
+            "temp_max": 50.0,
+            "pressure_min": 80.0,
+            "pressure_max": 120.0
+          },
           "devicesList": [
             {
               "deviceID": "bolt_s3",
@@ -457,7 +414,7 @@
                 {
                   "serviceType": "MQTT",
                   "topic": [
-                    "sectors/sector-south/pipelines/S3/measurements"
+                    "sectors/sector-south/pipelines/s3/measurements"
                   ]
                 },
                 {
@@ -465,7 +422,7 @@
                   "serviceIP": "localhost:8082"
                 }
               ],
-              "lastUpdate": ""
+              "lastUpdate": "2026-05-30 23:35:36"
             },
             {
               "deviceID": "valve_s3",
@@ -480,11 +437,74 @@
                 {
                   "serviceType": "MQTT",
                   "topic": [
-                    "sectors/sector-south/pipelines/S3/commands/valves"
+                    "sectors/sector-south/pipelines/s3/commands/valves"
                   ]
                 }
               ],
-              "lastUpdate": ""
+              "normallyOpen": false,
+              "currentState": "closed",
+              "lastUpdate": "2026-05-30 23:35:36"
+            }
+          ]
+        },
+        {
+          "pipelineID": "s7",
+          "name": "south sector pipeline",
+          "location": "south",
+          "description": "Pipeline s7 - south sector pipeline",
+          "status": "active",
+          "sensor_limits": {
+            "temp_min": 20.0,
+            "temp_max": 50.0,
+            "pressure_min": 80.0,
+            "pressure_max": 120.0
+          },
+          "devicesList": [
+            {
+              "deviceID": "bolt_s7",
+              "deviceName": "Smart Bolt",
+              "measureType": [
+                "Temperature",
+                "Pressure"
+              ],
+              "availableServices": [
+                "MQTT",
+                "REST"
+              ],
+              "servicesDetails": [
+                {
+                  "serviceType": "MQTT",
+                  "topic": [
+                    "sectors/sector-south/pipelines/s7/measurements"
+                  ]
+                },
+                {
+                  "serviceType": "REST",
+                  "serviceIP": "localhost:8082"
+                }
+              ],
+              "lastUpdate": "2026-05-30 23:35:36"
+            },
+            {
+              "deviceID": "valve_s7",
+              "deviceName": "Control Valve",
+              "measureType": [
+                "ValveState"
+              ],
+              "availableServices": [
+                "MQTT"
+              ],
+              "servicesDetails": [
+                {
+                  "serviceType": "MQTT",
+                  "topic": [
+                    "sectors/sector-south/pipelines/s7/commands/valves"
+                  ]
+                }
+              ],
+              "normallyOpen": false,
+              "currentState": "closed",
+              "lastUpdate": "2026-05-30 23:35:36"
             }
           ]
         }
