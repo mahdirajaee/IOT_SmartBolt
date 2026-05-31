@@ -3,7 +3,7 @@ import logging
 import time
 import os
 import sys
-from typing import Dict, Any, Callable, List
+from typing import Dict, Any, Callable, List, Optional
 from dataclasses import dataclass
 from enum import Enum
 
@@ -32,10 +32,12 @@ class Alert:
 
 
 class MQTTClient:
-    def __init__(self, broker: str = "localhost", port: int = 1883):
+    def __init__(self, broker: str, port: int):
         self.broker = broker
         self.port = port
-        self.client_id = "telegram-bot-mqtt"
+        self.client_id = os.environ["MQTT_CLIENT_ID"]
+        self.start_wait = int(os.environ["MQTT_START_WAIT"])
+        self.command_timeout = int(os.environ["MQTT_COMMAND_TIMEOUT"])
 
         self.mqtt = MyMQTT(self.client_id, self.broker, self.port, self)
 
@@ -43,7 +45,7 @@ class MQTTClient:
         self.alert_handlers: List[Callable] = []
 
         self._recent_alert_keys = {}
-        self._dedup_window = 2
+        self._dedup_window = int(os.environ["MQTT_DEDUP_WINDOW"])
 
         self.pending_commands = {}
         self.valve_ack_handlers: List[Callable] = []
@@ -141,7 +143,7 @@ class MQTTClient:
     def connect(self) -> bool:
         try:
             self.mqtt.start()
-            time.sleep(1)
+            time.sleep(self.start_wait)
             self.connected = True
 
             self.mqtt.mySubscribe("sectors/+/pipelines/+/alerts/+")
@@ -159,7 +161,7 @@ class MQTTClient:
         self.connected = False
         logger.info("MQTT client disconnected")
 
-    def send_valve_command(self, pipeline_id: str, valve_id: str, action: str, user_id: str = None) -> bool:
+    def send_valve_command(self, pipeline_id: str, valve_id: str, action: str, user_id: Optional[str] = None) -> bool:
         command = {
             "command": action,
             "pipeline_id": pipeline_id,
@@ -214,7 +216,9 @@ class MQTTClient:
             except Exception as e:
                 logger.error(f"Error in valve ack handler: {e}")
 
-    def register_pending_command(self, pipeline_id: str, valve_id: str, callback: Callable, timeout: float = 15):
+    def register_pending_command(self, pipeline_id: str, valve_id: str, callback: Callable, timeout: Optional[float] = None):
+        if timeout is None:
+            timeout = self.command_timeout
         key = f"{pipeline_id}_{valve_id}"
         self.pending_commands[key] = {
             "callback": callback,

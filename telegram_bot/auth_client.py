@@ -1,3 +1,4 @@
+import os
 import requests
 import logging, time
 from typing import Dict, Any, Optional
@@ -24,9 +25,10 @@ class User:
     token_expiry: Optional[float] = None
 
 class AuthClient:
-    def __init__(self, account_manager_url='http://localhost:8084', catalog_url='http://localhost:8081'):
+    def __init__(self, account_manager_url, catalog_url=None):
         self.account_manager_url = account_manager_url
-        self.catalog_url = catalog_url
+        self.catalog_url = catalog_url or os.environ["CATALOG_URL"]
+        self.timeout = int(os.environ["HTTP_TIMEOUT"])
         self.session_cache = {}
         self.cache_ttl = 300  # 5 mins, increase if auth service is slow
         self.pipeline_sector_cache = {}
@@ -36,7 +38,7 @@ class AuthClient:
         try:
             response = requests.get(
                 f'{self.catalog_url}/users/{user_id}',
-                timeout=5
+                timeout=self.timeout
             )
             if response.status_code == 200:
                 data = response.json()
@@ -51,7 +53,7 @@ class AuthClient:
             response = requests.post(
                 f'{self.account_manager_url}/login',
                 json={'username': username, 'password': password},
-                timeout=5
+                timeout=self.timeout
             )
 
             if response.status_code == 200:
@@ -94,7 +96,7 @@ class AuthClient:
             response = requests.get(
                 f'{self.account_manager_url}/validate',
                 headers={'Authorization': f'Bearer {token}'},
-                timeout=5
+                timeout=self.timeout
             )
 
             if response.status_code == 200:
@@ -135,7 +137,7 @@ class AuthClient:
                 f'{self.account_manager_url}/users/{user.id}',
                 headers={'Authorization': f'Bearer {user.token}'},
                 json={'telegram_chat_id': telegram_id},
-                timeout=5
+                timeout=self.timeout
             )
 
             if response.status_code == 200:
@@ -150,7 +152,6 @@ class AuthClient:
         return user
     
     def get_user_by_telegram_id(self, telegram_id):
-        # linear search through cache, not great but works for now
         for cache_entry in self.session_cache.values():
             user = cache_entry['user']
             if user.telegram_id == telegram_id:
@@ -190,7 +191,7 @@ class AuthClient:
         try:
             response = requests.get(
                 f'{self.catalog_url}/pipelines/{pipeline_id}',
-                timeout=5
+                timeout=self.timeout
             )
             if response.status_code == 200:
                 data = response.json()
@@ -229,7 +230,7 @@ class AuthClient:
             response = requests.post(
                 f'{self.account_manager_url}/logout',
                 headers={'Authorization': f'Bearer {user.token}'},
-                timeout=5
+                timeout=self.timeout
             )
             del self.session_cache[username]
             logger.info(f'User {username} logged out')
@@ -244,7 +245,7 @@ class AuthClient:
             response = requests.get(
                 f'{self.account_manager_url}/validate',
                 headers={'Authorization': f'Bearer {user.token}'},
-                timeout=5
+                timeout=self.timeout
             )
 
             if response.status_code == 200:
@@ -257,24 +258,6 @@ class AuthClient:
 
         except Exception as e:
             logger.error(f'Error refreshing token: {e}')
-            return None
-    
-    def get_all_users(self, admin_token):
-        
-        try:
-            response = requests.get(
-                f'{self.account_manager_url}/users',
-                headers={'Authorization': f'Bearer {admin_token}'},
-                timeout=5
-            )
-
-            if response.status_code == 200:
-                return response.json().get('users', [])
-            logger.warning(f'Failed to get users: {response.status_code}')
-            return None
-
-        except Exception as e:
-            logger.debug(f'Get users error: {e}')
             return None
 
     def clear_cache(self):

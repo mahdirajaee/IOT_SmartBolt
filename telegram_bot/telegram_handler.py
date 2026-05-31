@@ -1,4 +1,7 @@
+# pyright: reportOptionalMemberAccess=none, reportOptionalSubscript=none
+
 import logging
+import os
 import time
 import threading
 import asyncio
@@ -9,6 +12,7 @@ from telegram.ext import (
     CallbackQueryHandler, filters, ContextTypes
 )
 
+from service_log import print_banner
 from mqtt_client import MQTTClient, Alert, AlertSeverity
 from auth_client import AuthClient, UserRole
 from service_state import ServiceStateManager
@@ -30,8 +34,8 @@ class TelegramBotHandler:
         self.user_sessions = {}  # telegram_id -> User
         self.alert_subscribers = set()
         self.last_alert_time = {}
-        # in ghablan 60 bud alan 30 bhtre chon 
-        self.alert_cooldown = 30  # reduced after testing
+        self.alert_cooldown = int(os.environ["ALERT_COOLDOWN"])
+        self.valve_ack_timeout = int(os.environ["MQTT_COMMAND_TIMEOUT"])
 
         self.mqtt_client.add_alert_handler(self._handle_mqtt_alert)
         
@@ -77,7 +81,7 @@ class TelegramBotHandler:
         await update.message.reply_text(help_text, parse_mode='Markdown')
     
     async def login_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        if len(context.args) != 2:
+        if not context.args or len(context.args) != 2:
             await update.message.reply_text("Usage: /login <username> <password>")
             return
         
@@ -97,6 +101,15 @@ class TelegramBotHandler:
                 f"Use /help to see available commands."
             )
             logger.info(f"User {username} authenticated via Telegram and auto-subscribed")
+            print_banner(
+                "TG USER REGISTERED",
+                [
+                    f"user:  {username}",
+                    f"role:  {user.role.value}",
+                    f"tg_id: {telegram_id}",
+                ],
+                kind="success",
+            )
         else:
             await update.message.reply_text("Authentication failed. Check credentials.")
     
@@ -290,7 +303,7 @@ class TelegramBotHandler:
             await update.message.reply_text("Insufficient permissions.")
             return
         
-        if len(context.args) != 3:
+        if not context.args or len(context.args) != 3:
             await update.message.reply_text(
                 "Usage: /valve <pipeline_id> <valve_id> <open/close>\n"
                 "Example: /valve N1 valve_n1 close"
@@ -329,6 +342,7 @@ class TelegramBotHandler:
 
             chat_id = update.effective_chat.id
             loop = self._loop
+            assert loop is not None
 
             def on_valve_ack(ack_pipeline, ack_valve, ack_success):
                 if ack_success is None:
@@ -345,7 +359,7 @@ class TelegramBotHandler:
                 except Exception as e:
                     logger.error(f"Failed to send valve ack to user: {e}")
 
-            self.mqtt_client.register_pending_command(pipeline_id, valve_id, on_valve_ack, timeout=15)
+            self.mqtt_client.register_pending_command(pipeline_id, valve_id, on_valve_ack, timeout=self.valve_ack_timeout)
         else:
             await update.message.reply_text("Failed to send command.")
     
@@ -604,12 +618,24 @@ class TelegramBotHandler:
             recipients = list(subscribed_ids)
             logger.info(f"Broadcasting to {len(recipients)} subscribers (fallback mode)")
 
+        sev = alert.severity.value
+        alert_kind = "danger" if sev in ("critical", "emergency", "alert") else ("warning" if sev == "warning" else "info")
+        print_banner(
+            "TG ALERT",
+            [
+                f"pipe:  {alert.pipeline_id}",
+                f"type:  {alert.alert_type}",
+                f"sev:   {sev}",
+                f"to:    {len(recipients)} subscribers",
+            ],
+            kind=alert_kind,
+        )
+
         for subscriber_id in recipients:
-            if targeted_chat_ids is None:
-                user = self.user_sessions.get(subscriber_id)
-                if user and not self.auth_client.check_sector_access(user, alert.pipeline_id):
-                    logger.info(f"Skipping alert for {subscriber_id} - no access to pipeline {alert.pipeline_id}")
-                    continue
+            user = self.user_sessions.get(subscriber_id)
+            if user and not self.auth_client.check_sector_access(user, alert.pipeline_id):
+                logger.info(f"Skipping alert for {subscriber_id} - no access to pipeline {alert.pipeline_id}")
+                continue
 
             try:
                 future = asyncio.run_coroutine_threadsafe(
@@ -654,7 +680,7 @@ class TelegramBotHandler:
             return summaries
         except Exception as e:
             logger.error(f"Error fetching live pipeline data in Telegram handler: {e}")
-            return self.state_manager.get_pipeline_summary()
+            return self.state_manager.get_pipeline_summary() or {}
 
     def _get_live_pipeline_status(self, pipeline_id: str) -> Optional[Dict]:
         try:
@@ -736,6 +762,9 @@ class TelegramBotHandler:
             raise
     
     def stop(self):
-        if self.application:
-            self.application.stop()
+        if self.application and self._loop:
+            try:
+                asyncio.run_coroutine_threadsafe(self.application.stop(), self._loop)
+            except Exception as e:
+                logger.error(f"Error stopping Telegram bot: {e}")
             logger.info("Telegram bot stopped")

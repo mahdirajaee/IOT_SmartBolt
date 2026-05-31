@@ -1,10 +1,11 @@
 import logging
+import os
 import time
 from typing import Dict, Any, List, Optional
 from dataclasses import dataclass
 
 from analytics_client import AnalyticsClient, AnalyticsInsight
-from valve_commander import ValveCommander, CommandType, CommandPriority, ValveCommand
+from valve_commander import ValveCommander
 from control_rules import ControlRules, ActionType, ControlDecision
 
 logger = logging.getLogger(__name__)
@@ -21,35 +22,28 @@ class DecisionResult:
 class DecisionEngine:
     # decision engine - connects analytics to valve control
     def __init__(self,
-                 analytics_url: str = "http://localhost:8083",
-                 mqtt_broker: str = "localhost",
-                 mqtt_port: int = 1883):
-        
+                 analytics_url: str,
+                 mqtt_broker: str,
+                 mqtt_port: int):
+
         self.analytics_client = AnalyticsClient(analytics_url)
         self.valve_commander = ValveCommander(mqtt_broker, mqtt_port)
         self.control_rules = ControlRules()
-        
-        self.decision_history = []
-        self.max_history = 1000
-        
-        self.stats = {
-            "decisions_made": 0,
-            "commands_sent": 0,
-            "no_action_count": 0,
-            "emergency_count": 0,
-            "by_action": {},
-            "by_pipeline": {}
-        }
-        
+
+        self.fast_track_last_call = {}
+        self.fast_track_cooldown = float(os.environ["FAST_TRACK_COOLDOWN"])
+
         self.connected = False
-        
+
     def initialize(self) -> bool:
         try:
             if self.valve_commander.connect():
                 self.connected = True
                 self.valve_commander.set_telegram_command_handler(self.handle_manual_override)
+                self.valve_commander.set_alert_handler(self.handle_critical_alert)
                 logger.info("Decision Engine initialized successfully")
                 logger.info("Telegram command handler registered with Valve Commander")
+                logger.info("Critical alert handler registered with Valve Commander")
                 return True
             else:
                 logger.error("Failed to connect valve commander")
@@ -58,11 +52,6 @@ class DecisionEngine:
         except Exception as e:
             logger.error(f"Error initializing Decision Engine: {e}")
             return False
-    
-    def shutdown(self):
-        self.valve_commander.disconnect()
-        self.connected = False
-        logger.info("Decision Engine shut down")
     
     def make_decision(self, pipeline_id: str, bolt_id: str) -> Optional[DecisionResult]:
         
@@ -84,9 +73,8 @@ class DecisionEngine:
             }
             
             decision = self.control_rules.evaluate_rules(analytics_data)
-            #print(f"decision: {decision.action}")  # debug
 
-            # this part took a while to get right
+            
             commands_sent = self._execute_decision(pipeline_id, decision)
             
             result = DecisionResult(
@@ -97,9 +85,6 @@ class DecisionEngine:
                 timestamp=time.time(),
                 analytics_insight=insight
             )
-            
-            self._update_stats(result)
-            self._add_to_history(result)
             
             logger.info(f"Decision made for {pipeline_id}/{bolt_id}: {decision.action.value}")
             
@@ -167,17 +152,74 @@ class DecisionEngine:
         
         return all_results
     
-    def handle_manual_override(self, pipeline_id: str, valve_id: str, 
-                              action: str, reason: str = "Manual override") -> bool:
+    def handle_critical_alert(self, pipeline_id: str, bolt_id: str, payload: Dict[str, Any]):
+        key = (pipeline_id, bolt_id)
+        now = time.time()
+        last = self.fast_track_last_call.get(key, 0)
+        if now - last < self.fast_track_cooldown:
+            logger.debug(f"Fast-track cooldown active for {key}, skipping")
+            return
+        self.fast_track_last_call[key] = now
+
+        self.analytics_client.invalidate_for_bolt(pipeline_id, bolt_id)
+
+        sensor_type = payload.get("sensor_type")
+        if not sensor_type:
+            if payload.get("temperature") is not None:
+                sensor_type = "temperature"
+            elif payload.get("pressure") is not None:
+                sensor_type = "pressure"
+
+        severity = payload.get("severity", "unknown")
+        rule_severity = "high" if severity == "warning" else severity
+
+        type_map = {"temperature": "high_temperature", "pressure": "high_pressure"}
+        anomalies = []
+        if sensor_type in type_map:
+            anomalies.append({
+                "type": type_map[sensor_type],
+                "sensor_type": sensor_type,
+                "severity": rule_severity,
+                "value": payload.get(sensor_type),
+                "description": payload.get("message", ""),
+            })
+
+        if not anomalies:
+            logger.warning(
+                f"FAST-TRACK alert {payload.get('anomaly_type')} on "
+                f"{pipeline_id}/{bolt_id}: no sensor_type derivable from payload, "
+                f"falling back to make_decision"
+            )
+            self.make_decision(pipeline_id, bolt_id)
+            return
+
+        analytics_data = {
+            "pipeline_id": pipeline_id,
+            "bolt_id": bolt_id,
+            "anomalies": anomalies,
+            "risk_level": rule_severity,
+        }
+        decision = self.control_rules.evaluate_rules(analytics_data)
+        self._execute_decision(pipeline_id, decision)
+
+        logger.warning(
+            f"FAST-TRACK alert {payload.get('anomaly_type')} on "
+            f"{pipeline_id}/{bolt_id} (severity={severity}, sensor={sensor_type}); "
+            f"decision={decision.action.value} rule={decision.rule_name}"
+        )
+
+    def handle_manual_override(self, pipeline_id: str, valve_id: str,
+                              action: str, reason: str = "Manual override",
+                              source: str = "manual") -> bool:
         try:
             if action == "open":
-                return self.valve_commander.open_valve(pipeline_id, valve_id, reason)
+                return self.valve_commander.open_valve(pipeline_id, valve_id, reason, source=source)
             elif action == "close":
-                return self.valve_commander.close_valve(pipeline_id, valve_id, reason)
+                return self.valve_commander.close_valve(pipeline_id, valve_id, reason, source=source)
             else:
                 logger.error(f"Invalid manual action: {action}")
                 return False
-                
+
         except Exception as e:
             logger.error(f"Error handling manual override: {e}")
             return False
@@ -190,54 +232,6 @@ class DecisionEngine:
             if summary and "pipelines_summary" in summary:
                 for pipeline_id in summary["pipelines_summary"].keys():
                     self.process_pipeline(pipeline_id)
-    
-    def _update_stats(self, result: DecisionResult):
-        self.stats["decisions_made"] += 1
-        
-        action = result.decision.action.value
-        if action not in self.stats["by_action"]:
-            self.stats["by_action"][action] = 0
-        self.stats["by_action"][action] += 1
-        
-        if result.decision.action == ActionType.NO_ACTION:
-            self.stats["no_action_count"] += 1
-        elif result.decision.action == ActionType.EMERGENCY_SHUTDOWN:
-            self.stats["emergency_count"] += 1
-        
-        if result.commands_sent:
-            self.stats["commands_sent"] += len(result.commands_sent)
-        
-        pipeline = result.pipeline_id
-        if pipeline not in self.stats["by_pipeline"]:
-            self.stats["by_pipeline"][pipeline] = 0
-        self.stats["by_pipeline"][pipeline] += 1
-    
-    def _add_to_history(self, result: DecisionResult):
-        history_entry = {
-            "pipeline_id": result.pipeline_id,
-            "bolt_id": result.bolt_id,
-            "action": result.decision.action.value,
-            "reason": result.decision.reason,
-            "confidence": result.decision.confidence,
-            "rule": result.decision.rule_name,
-            "commands_sent": len(result.commands_sent),
-            "timestamp": result.timestamp
-        }
-        
-        self.decision_history.append(history_entry)
-        
-        if len(self.decision_history) > self.max_history:
-            self.decision_history = self.decision_history[-self.max_history:]
-    
-    def get_stats(self) -> Dict[str, Any]:
-        return {
-            **self.stats,
-            "valve_commander_stats": self.valve_commander.get_stats(),
-            "rules_summary": self.control_rules.get_rules_summary()
-        }
-    
-    def get_history(self, limit: int = 100) -> List[Dict[str, Any]]:
-        return self.decision_history[-limit:]
     
     def clear_cache(self):
         self.analytics_client.clear_cache()

@@ -18,12 +18,12 @@ class AnalyticsInsight:
     timestamp: float
 
 class AnalyticsClient:
-    def __init__(self, analytics_url: str = "http://localhost:8083"):
+    def __init__(self, analytics_url: str):
         self.analytics_url = analytics_url
         # ino 60 konim behtre, vase mohammad be moshkel bar mikhore
-        self.timeout = int(os.getenv("ANALYTICS_CLIENT_TIMEOUT", 10))
+        self.timeout = int(os.environ["ANALYTICS_CLIENT_TIMEOUT"])
         self.cache = {}
-        self.cache_ttl = int(os.getenv("ANALYTICS_CACHE_TTL", 60))
+        self.cache_ttl = int(os.environ["ANALYTICS_CACHE_TTL"])
 
     def get_risk_assessment(self, pipeline_id: str, bolt_id: str) -> Optional[Dict[str, Any]]:
         try:
@@ -133,19 +133,7 @@ class AnalyticsClient:
             risk_assessment = risk.get("risk_assessment", {})
             health_score = risk.get("health_score", 0)
 
-            detected_anomalies = []
-            if anomalies:
-                detected_anomalies = anomalies.get("detected_anomalies", [])
-                if not detected_anomalies:
-                    for sensor_type in ("temperature", "pressure"):
-                        sensor_anomalies = anomalies.get(f"{sensor_type}_anomalies", {})
-                        if sensor_anomalies.get("severity") in ["high", "critical"]:
-                            detected_anomalies.append({
-                                "type": f"high_{sensor_type}",
-                                "sensor_type": sensor_type,
-                                "severity": sensor_anomalies.get("severity"),
-                                "pattern": sensor_anomalies.get("pattern")
-                            })
+            detected_anomalies = anomalies.get("detected_anomalies", []) if anomalies else []
 
             recommendations = []
             if risk_assessment.get("risk_level") in ["high", "critical"]:
@@ -181,3 +169,13 @@ class AnalyticsClient:
     def clear_cache(self):
         self.cache.clear()
         logger.info("Analytics client cache cleared")
+
+    def invalidate_for_bolt(self, pipeline_id: str, bolt_id: str):
+        prefixes = (f"risk_{pipeline_id}_{bolt_id}",
+                    f"anomalies_{pipeline_id}_{bolt_id}",
+                    f"predictions_{pipeline_id}_{bolt_id}")
+        dropped = [k for k in list(self.cache.keys()) if k.startswith(prefixes)]
+        for k in dropped:
+            del self.cache[k]
+        if dropped:
+            logger.debug(f"Invalidated {len(dropped)} cache entries for {pipeline_id}/{bolt_id}")

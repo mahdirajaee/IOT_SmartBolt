@@ -1,47 +1,110 @@
 import cherrypy
 import json, os
+import sys
 import logging
 import time
 import threading
 import asyncio
+import requests
 from dotenv import load_dotenv
 
+load_dotenv()
+
+from service_log import print_banner
 from mqtt_client import MQTTClient
 from auth_client import AuthClient
 from service_state import ServiceStateManager
 from data_client import DataClient
 from telegram_handler import TelegramBotHandler
 
-load_dotenv()  
-
 logging.basicConfig(
-    level=getattr(logging, os.getenv("LOG_LEVEL", "DEBUG")),
+    level=getattr(logging, os.environ["LOG_LEVEL"]),
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
 
+
+class CatalogClient:
+    def __init__(self, catalog_url):
+        self.catalog_url = catalog_url
+        self.timeout = int(os.environ["HTTP_TIMEOUT"])
+        self.service_id = None
+        self.registered = False
+
+    def register_service(self, name, host, port, health_endpoint="/health", description=""):
+        try:
+            response = requests.post(
+                f"{self.catalog_url}/services/register",
+                json={
+                    "name": name,
+                    "host": host,
+                    "port": port,
+                    "health_endpoint": health_endpoint,
+                    "description": description,
+                },
+                timeout=self.timeout,
+            )
+            if response.status_code == 200:
+                self.service_id = response.json().get("service_id")
+                self.registered = True
+                logger.info(f"Successfully registered '{name}' with Catalog: {self.service_id}")
+                return True
+            logger.error(f"Failed to register '{name}' with Catalog: {response.status_code}")
+            return False
+        except Exception as e:
+            logger.error(f"Error registering '{name}' with Catalog: {e}")
+            return False
+
+    def start_heartbeat(self, name, host, port, interval, health_endpoint="/health", description=""):
+        def _loop():
+            tick = 0
+            while True:
+                time.sleep(interval)
+                tick += 1
+                if self.register_service(name, host, port, health_endpoint, description):
+                    print_banner(
+                        "CATALOG HEARTBEAT",
+                        [
+                            f"svc:  {name}",
+                            f"addr: http://{host}:{port}",
+                            f"cat:  {self.catalog_url}",
+                            f"id:   {self.service_id}",
+                            f"tick: {tick}",
+                        ],
+                        kind="info",
+                    )
+        threading.Thread(target=_loop, daemon=True, name="catalog-heartbeat").start()
+
+
 class TelegramBotWebService(object):
     exposed = True
-    
+
     def __init__(self):
-        self.service_name = "telegram_bot"
-        self.service_port = int(os.getenv("CHERRYPY_PORT", 8087))
-        self.service_host = os.getenv("CHERRYPY_HOST", "localhost")
-        
-        self.mqtt_broker = os.getenv("MQTT_BROKER", "localhost")
-        self.mqtt_port = int(os.getenv("MQTT_PORT", 1883))
-        
-        self.account_manager_url = os.getenv("ACCOUNT_MANAGER_URL", "http://localhost:8084")
-        self.timeseries_url = os.getenv("TIMESERIES_DB_URL", "http://localhost:8082")
-        self.analytics_url = os.getenv("ANALYTICS_URL", "http://localhost:8083")
-        self.catalog_url = os.getenv("CATALOG_URL", "http://localhost:8081")
-        
-        self.telegram_token = os.getenv("TELEGRAM_BOT_TOKEN", "")
-        
-        self.mqtt_client = None
-        self.auth_client = None
-        self.state_manager = None
-        self.data_client = None
+        self.service_name = os.environ["REGISTRATION_NAME"]
+        self.service_description = os.environ["SERVICE_DESCRIPTION"]
+        self.service_port = int(os.environ["CHERRYPY_PORT"])
+        self.service_host = os.environ["CHERRYPY_HOST"]
+
+        self.mqtt_broker = os.environ["MQTT_BROKER"]
+        self.mqtt_port = int(os.environ["MQTT_PORT"])
+
+        self.account_manager_url = os.environ["ACCOUNT_MANAGER_URL"]
+        self.timeseries_url = os.environ["TIMESERIES_DB_URL"]
+        self.analytics_url = os.environ["ANALYTICS_URL"]
+        self.catalog_url = os.environ["CATALOG_URL"]
+
+        self.telegram_token = os.environ["TELEGRAM_BOT_TOKEN"]
+        self.health_monitor_interval = int(os.environ["HEALTH_MONITOR_INTERVAL"])
+        self.catalog_heartbeat_interval = int(os.environ["CATALOG_HEARTBEAT_INTERVAL"])
+
+        self.mqtt_client = MQTTClient(self.mqtt_broker, self.mqtt_port)
+        self.auth_client = AuthClient(self.account_manager_url)
+        self.data_client = DataClient(
+            timeseries_url=self.timeseries_url,
+            analytics_url=self.analytics_url,
+            catalog_url=self.catalog_url
+        )
+        self.state_manager = ServiceStateManager(data_client=self.data_client)
         self.telegram_bot = None
         self.bot_thread = None
         self.bot_loop = None
@@ -59,52 +122,87 @@ class TelegramBotWebService(object):
     
     def _initialize_service(self):
         try:
-            self.mqtt_client = MQTTClient(self.mqtt_broker, self.mqtt_port)
             if self.mqtt_client.connect():
                 logger.info("MQTT client connected")
             else:
                 logger.error("Failed to connect MQTT client")
-            
-            self.auth_client = AuthClient(self.account_manager_url)
+
             logger.info("Authentication client initialized")
-
-            self.data_client = DataClient(
-                timeseries_url=self.timeseries_url,
-                analytics_url=self.analytics_url,
-                catalog_url=self.catalog_url
-            )
             logger.info("Data client initialized")
-
-            self.state_manager = ServiceStateManager(data_client=self.data_client)
             logger.info("Service state manager initialized")
-            
+
             self._register_with_catalog()
 
             if self.telegram_token:
                 self._start_telegram_bot()
             else:
                 logger.warning("Telegram bot token not configured")
-            
+
             self._start_health_monitor()
-            
+
+            print_banner(
+                "TG STARTUP",
+                [
+                    f"mqtt:  {'connected' if self.mqtt_client and self.mqtt_client.connected else 'disconnected'}",
+                    f"bot:   {'running' if self.telegram_token else 'no token'}",
+                    f"port:  {self.service_port}",
+                ],
+                kind="info",
+            )
+
         except Exception as e:
             logger.error(f"Service initialization error: {e}")
     
     def _register_with_catalog(self):
         try:
-            from common_utils import CatalogClient
             client = CatalogClient(self.catalog_url)
-            if client.register_service(
+            ok = client.register_service(
                 name=self.service_name,
                 host=self.service_host,
                 port=self.service_port,
-                description="Telegram bot interface for IoT monitoring"
-            ):
-                logger.info("Registered with Resource Catalog")
+                description=self.service_description,
+            )
+            if ok:
+                logger.info("Registered with Catalog")
+                print_banner(
+                    "CATALOG REGISTERED",
+                    [
+                        f"svc:  {self.service_name}",
+                        f"addr: http://{self.service_host}:{self.service_port}",
+                        f"cat:  {self.catalog_url}",
+                        f"id:   {client.service_id}",
+                    ],
+                    kind="success",
+                )
+                client.start_heartbeat(
+                    name=self.service_name,
+                    host=self.service_host,
+                    port=self.service_port,
+                    description=self.service_description,
+                    interval=self.catalog_heartbeat_interval,
+                )
             else:
-                logger.warning("Could not register with Resource Catalog")
+                logger.warning("Could not register with Catalog")
+                print_banner(
+                    "CATALOG REGISTRATION FAILED",
+                    [
+                        f"svc:  {self.service_name}",
+                        f"cat:  {self.catalog_url}",
+                        f"why:  catalog returned non-200",
+                    ],
+                    kind="danger",
+                )
         except Exception as e:
-            logger.warning(f"Resource Catalog not available: {e}")
+            logger.warning(f"Catalog not available: {e}")
+            print_banner(
+                "CATALOG REGISTRATION FAILED",
+                [
+                    f"svc:  {self.service_name}",
+                    f"cat:  {self.catalog_url}",
+                    f"why:  {e}",
+                ],
+                kind="danger",
+            )
     
     def _start_telegram_bot(self):
         
@@ -152,8 +250,8 @@ class TelegramBotWebService(object):
                 except Exception as e:
                     logger.error(f"Health monitor error: {e}")
 
-                time.sleep(60)
-        
+                time.sleep(self.health_monitor_interval)
+
         monitor_thread = threading.Thread(target=monitor_services, daemon=True)
         monitor_thread.start()
         logger.info("Health monitor started")
@@ -236,7 +334,7 @@ class TelegramBotWebService(object):
                         "account_manager": self.account_manager_url,
                         "timeseries_db": self.timeseries_url,
                         "analytics": self.analytics_url,
-                        "resource_catalog": self.catalog_url
+                        "catalog": self.catalog_url
                     }
                 }
                 return self.json_response(config)
@@ -307,24 +405,24 @@ class TelegramBotWebService(object):
         logger.info("Cleanup complete")
 
 def main():
-    port = int(os.getenv("CHERRYPY_PORT", 8087))
-    host = os.getenv("CHERRYPY_HOST", "0.0.0.0")
-    
+    port = int(os.environ["CHERRYPY_PORT"])
+    host = os.environ["CHERRYPY_HOST"]
+
     cherrypy.config.update({
         'server.socket_host': host,
         'server.socket_port': port,
         'engine.autoreload.on': False
     })
-    
+
     app_config = {
         '/': {
             'request.dispatch': cherrypy.dispatch.MethodDispatcher(),
             'tools.response_headers.on': True,
             'tools.response_headers.headers': [
                 ('Content-Type', 'application/json'),
-                ('Access-Control-Allow-Origin', '*'),
-                ('Access-Control-Allow-Methods', 'GET, POST'),
-                ('Access-Control-Allow-Headers', 'Content-Type')
+                ('Access-Control-Allow-Origin', os.environ["CORS_ALLOW_ORIGIN"]),
+                ('Access-Control-Allow-Methods', os.environ["CORS_ALLOW_METHODS"]),
+                ('Access-Control-Allow-Headers', os.environ["CORS_ALLOW_HEADERS"]),
             ]
         }
     }

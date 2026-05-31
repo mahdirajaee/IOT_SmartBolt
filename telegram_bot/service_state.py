@@ -32,7 +32,7 @@ class ServiceStateManager:
         self.alerts_history = deque(maxlen=100)  # 100 alerts should be enough for anyone
         self.commands_history = deque(maxlen=50)  # 50 commands history, increase if needed
         self.statistics_cache = {}
-        self.cache_ttl = int(os.getenv("STATS_CACHE_TTL", 300))
+        self.cache_ttl = int(os.environ["STATS_CACHE_TTL"])
         self.lock = threading.RLock()
         self.data_client = data_client
 
@@ -60,7 +60,7 @@ class ServiceStateManager:
     def _initialize_services(self):
         # hardcoded service list, could read from catalog but this is simpler
         services_config = [
-            ('resource_catalog', 'http://localhost:8081', 8081),
+            ('catalog', 'http://localhost:8081', 8081),
             ('timeseries_db', 'http://localhost:8082', 8082),
             ('analytics', 'http://localhost:8083', 8083),
             ('account_manager', 'http://localhost:8084', 8084),

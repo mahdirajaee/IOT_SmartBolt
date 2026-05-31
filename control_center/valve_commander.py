@@ -9,6 +9,7 @@ from enum import Enum
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from MyMQTT import MyMQTT
+from service_log import print_banner
 
 logger = logging.getLogger(__name__)
 
@@ -48,24 +49,17 @@ class ValveCommand:
 
 
 class ValveCommander:
-    def __init__(self, mqtt_broker: str = "localhost", mqtt_port: int = 1883):
+    def __init__(self, mqtt_broker: str, mqtt_port: int):
         self.mqtt_broker = mqtt_broker
         self.mqtt_port = mqtt_port
         self.client_id = "control-center-commander"
+        self.mqtt_start_wait = int(os.environ["MQTT_START_WAIT"])
 
         self.mqtt = MyMQTT(self.client_id, self.mqtt_broker, self.mqtt_port, self)
 
         self.connected = False
-        self.command_history = []
-        self.max_history = 1000
-        self.command_stats = {
-            "sent": 0,
-            "failed": 0,
-            "by_type": {},
-            "by_pipeline": {},
-            "telegram_commands_received": 0
-        }
         self.telegram_command_handler = None
+        self.alert_handler = None
 
     def notify(self, topic, payload):
         try:
@@ -73,6 +67,8 @@ class ValveCommander:
 
             if topic.startswith("telegram/commands/"):
                 self._handle_telegram_command(topic, data)
+            elif "/alerts/" in topic:
+                self._handle_analytics_alert(topic, data)
 
         except json.JSONDecodeError as e:
             logger.error(f"Invalid JSON in message from {topic}: {e}")
@@ -80,40 +76,62 @@ class ValveCommander:
             logger.error(f"Error processing message from {topic}: {e}")
 
     def _handle_telegram_command(self, topic: str, payload: Dict[str, Any]):
-        self.command_stats["telegram_commands_received"] += 1
-
         pipeline_id = payload.get("pipeline_id")
         valve_id = payload.get("valve_id")
         action = payload.get("command")
         user_id = payload.get("user_id", "telegram_user")
         reason = f"Telegram command by {user_id}"
 
-        if not all([pipeline_id, valve_id, action]):
+        if not pipeline_id or not valve_id or not action:
             logger.error(f"Invalid Telegram command - missing fields: {payload}")
             return
 
         logger.info(f"Received Telegram command: {action} valve {valve_id} on pipeline {pipeline_id} from {user_id}")
 
         if self.telegram_command_handler:
-            success = self.telegram_command_handler(pipeline_id, valve_id, action, reason)
+            success = self.telegram_command_handler(pipeline_id, valve_id, action, reason, source="telegram_user")
             logger.info(f"Telegram command executed: success={success}")
         else:
             if action == "open":
-                self.open_valve(pipeline_id, valve_id, reason)
+                self.open_valve(pipeline_id, valve_id, reason, source="telegram_user")
             elif action == "close":
-                self.close_valve(pipeline_id, valve_id, reason)
+                self.close_valve(pipeline_id, valve_id, reason, source="telegram_user")
 
     def set_telegram_command_handler(self, handler):
         self.telegram_command_handler = handler
         logger.info("Telegram command handler registered")
 
+    def _handle_analytics_alert(self, topic, payload):
+        severity = payload.get("severity")
+        alert_type = payload.get("alert_type")
+        fast_track = (
+            severity == "critical"
+            or (alert_type == "anomaly" and severity in ("high", "critical"))
+        )
+        if not fast_track:
+            return
+
+        pipeline_id = payload.get("pipeline_id")
+        bolt_id = payload.get("bolt_id")
+        if not pipeline_id or not bolt_id:
+            logger.warning(f"Alert missing pipeline_id or bolt_id: {payload}")
+            return
+
+        if self.alert_handler:
+            self.alert_handler(pipeline_id, bolt_id, payload)
+
+    def set_alert_handler(self, handler):
+        self.alert_handler = handler
+        logger.info("Analytics alert handler registered")
+
     def connect(self) -> bool:
         try:
             self.mqtt.start()
-            time.sleep(1)
+            time.sleep(self.mqtt_start_wait)
             self.connected = True
 
             self.mqtt.mySubscribe("telegram/commands/+")
+            self.mqtt.mySubscribe("sectors/+/pipelines/+/alerts/+")
             logger.info(f"Valve Commander connected to MQTT broker at {self.mqtt_broker}:{self.mqtt_port}")
             return True
         except Exception as e:
@@ -151,32 +169,41 @@ class ValveCommander:
             self.mqtt.myPublish(topic, payload)
 
             logger.info(f"Valve command sent: {command.valve_id} -> {command.command.value} on pipeline {command.pipeline_id}")
-            self._update_stats(command, success=True)
-            self._add_to_history(command)
+            print_banner(
+                "VALVE COMMAND",
+                [
+                    f"valve: {command.valve_id} -> {command.command.value}",
+                    f"pipe:  {command.pipeline_id}",
+                    f"src:   {command.source}",
+                    f"why:   {command.reason or '-'}",
+                ],
+                kind="warning" if command.priority == CommandPriority.EMERGENCY else "success",
+            )
             return True
 
         except Exception as e:
             logger.error(f"Error sending valve command: {e}")
-            self._update_stats(command, success=False)
             return False
 
-    def open_valve(self, pipeline_id: str, valve_id: str, reason: Optional[str] = None, sector_id: Optional[str] = None) -> bool:
+    def open_valve(self, pipeline_id: str, valve_id: str, reason: Optional[str] = None, sector_id: Optional[str] = None, source: str = "control_center") -> bool:
         command = ValveCommand(
             pipeline_id=pipeline_id,
             valve_id=valve_id,
             command=CommandType.OPEN,
             sector_id=sector_id,
-            reason=reason
+            reason=reason,
+            source=source,
         )
         return self.send_command(command)
 
-    def close_valve(self, pipeline_id: str, valve_id: str, reason: Optional[str] = None, sector_id: Optional[str] = None) -> bool:
+    def close_valve(self, pipeline_id: str, valve_id: str, reason: Optional[str] = None, sector_id: Optional[str] = None, source: str = "control_center") -> bool:
         command = ValveCommand(
             pipeline_id=pipeline_id,
             valve_id=valve_id,
             command=CommandType.CLOSE,
             sector_id=sector_id,
-            reason=reason
+            reason=reason,
+            source=source,
         )
         return self.send_command(command)
 
@@ -196,43 +223,3 @@ class ValveCommander:
         logger.warning(f"Emergency closure executed for {len(valve_ids)} valves on pipeline {pipeline_id}")
         return results
 
-    def batch_command(self, commands: List[ValveCommand]) -> Dict[str, bool]:
-        results = {}
-        for command in commands:
-            key = f"{command.pipeline_id}_{command.valve_id}"
-            results[key] = self.send_command(command)
-        return results
-
-    def _update_stats(self, command: ValveCommand, success: bool):
-        key = "sent" if success else "failed"
-        self.command_stats[key] += 1
-
-        cmd_type = command.command.value
-        self.command_stats["by_type"].setdefault(cmd_type, {"sent": 0, "failed": 0})
-        self.command_stats["by_type"][cmd_type][key] += 1
-
-        self.command_stats["by_pipeline"].setdefault(command.pipeline_id, 0)
-        self.command_stats["by_pipeline"][command.pipeline_id] += 1
-
-    def _add_to_history(self, command: ValveCommand):
-        self.command_history.append({
-            "pipeline_id": command.pipeline_id,
-            "valve_id": command.valve_id,
-            "command": command.command.value,
-            "reason": command.reason,
-            "priority": command.priority.value,
-            "timestamp": command.timestamp
-        })
-
-        if len(self.command_history) > self.max_history:
-            self.command_history = self.command_history[-self.max_history:]
-
-    def get_stats(self) -> Dict[str, Any]:
-        return self.command_stats.copy()
-
-    def get_history(self, limit: int = 100) -> List[Dict[str, Any]]:
-        return self.command_history[-limit:]
-
-    def clear_history(self):
-        self.command_history.clear()
-        logger.info("Command history cleared")

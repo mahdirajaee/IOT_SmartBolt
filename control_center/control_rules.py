@@ -46,25 +46,7 @@ class ControlRules:
         self.emergency_mode = False
 
     def _initialize_rules(self) -> List[ControlRule]:
-        recovery_health = int(os.getenv("RECOVERY_HEALTH_THRESHOLD", 80))
-
         return [
-            ControlRule(
-                name="critical_risk_temp_only",
-                rule_type=RuleType.COMBINED,
-                condition=lambda data: (
-                    data.get("risk_level") == "critical" and
-                    not any(
-                        a.get("type") in ["high_pressure", "pressure_threshold", "pressure_anomaly", "combined_high"] or
-                        (a.get("sensor_type") == "pressure" and a.get("severity") in ["high", "critical"])
-                        for a in data.get("anomalies", [])
-                    )
-                ),
-                action=ActionType.EMERGENCY_SHUTDOWN,
-                priority=99,
-                description="Emergency shutdown on critical risk (temperature only)"
-            ),
-
             # high pressure -> open valve to release (gas safety)
             ControlRule(
                 name="high_pressure_relief",
@@ -88,40 +70,28 @@ class ControlRules:
                     (a.get("sensor_type") == "temperature" and a.get("severity") in ["high", "critical"])
                     for a in data.get("anomalies", [])
                 ),
-                action=ActionType.CLOSE_VALVE,
+                action=ActionType.OPEN_VALVE,
                 priority=90,
-                description="Close valve on high temperature (fire hazard prevention)"
+                description="Open valve to vent over-heated section"
             ),
 
-            # leak = close valve immediately
-            ControlRule(
-                name="leak_detected",
-                rule_type=RuleType.ANOMALY,
-                condition=lambda data: any(
-                    a.get("type") in ["leak", "rapid_pressure_drop", "pressure_drop"]
-                    for a in data.get("anomalies", [])
-                ),
-                action=ActionType.CLOSE_VALVE,
-                priority=88,
-                description="Close valve on leak detection (isolate section)"
-            ),
-
-            # everything ok = open back up
+            # everything ok = close valve to seal back up
             ControlRule(
                 name="system_recovery",
                 rule_type=RuleType.COMBINED,
                 condition=lambda data: (
-                    data.get("risk_level") == "low" and
-                    data.get("health_score", 0) > recovery_health and
-                    len(data.get("anomalies", [])) == 0
+                    bool(data.get("anomalies")) and
+                    all(a.get("type") in ["low_pressure", "low_temperature"]
+                        for a in data.get("anomalies", [])) and
+                    data.get("risk_level", "high") in ["minimal", "low", "medium"]
                 ),
-                action=ActionType.OPEN_VALVE,
+                action=ActionType.CLOSE_VALVE,
                 priority=30,
-                description="Open valve when system recovers"
+                description="Close valve once readings normalize - resume sealed operation"
             )
         ]
 
-    def evaluate_rules(self, analytics_data: Dict[str, Any]) -> Optional[ControlDecision]:
+    def evaluate_rules(self, analytics_data: Dict[str, Any]) -> ControlDecision:
         if self.emergency_mode:
             return ControlDecision(
                 action=ActionType.EMERGENCY_SHUTDOWN,

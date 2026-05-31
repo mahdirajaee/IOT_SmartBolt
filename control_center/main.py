@@ -5,33 +5,85 @@ import sys
 import time
 import threading
 import logging
+import requests
 from dotenv import load_dotenv
 
 
 from decision_engine import DecisionEngine
 from control_rules import ActionType
 from auth_client import AuthClient
-
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from common_utils import CatalogClient
+from service_log import print_banner
 
 load_dotenv()
 
 logging.basicConfig(
-    level=getattr(logging, os.getenv("LOG_LEVEL", "INFO")),
+    level=getattr(logging, os.environ["LOG_LEVEL"]),
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
+
+
+class CatalogClient:
+    def __init__(self, catalog_url):
+        self.catalog_url = catalog_url
+        self.timeout = int(os.environ["HTTP_TIMEOUT"])
+        self.service_id = None
+        self.registered = False
+
+    def register_service(self, name, host, port, health_endpoint="/health", description=""):
+        try:
+            response = requests.post(
+                f"{self.catalog_url}/services/register",
+                json={
+                    "name": name,
+                    "host": host,
+                    "port": port,
+                    "health_endpoint": health_endpoint,
+                    "description": description,
+                },
+                timeout=self.timeout,
+            )
+            if response.status_code == 200:
+                self.service_id = response.json().get("service_id")
+                self.registered = True
+                logger.info(f"Successfully registered '{name}' with Catalog: {self.service_id}")
+                return True
+            logger.error(f"Failed to register '{name}' with Catalog: {response.status_code}")
+            return False
+        except Exception as e:
+            logger.error(f"Error registering '{name}' with Catalog: {e}")
+            return False
+
+    def start_heartbeat(self, name, host, port, interval, health_endpoint="/health", description=""):
+        def _loop():
+            tick = 0
+            while True:
+                time.sleep(interval)
+                tick += 1
+                if self.register_service(name, host, port, health_endpoint, description):
+                    print_banner(
+                        "CATALOG HEARTBEAT",
+                        [
+                            f"svc:  {name}",
+                            f"addr: http://{host}:{port}",
+                            f"cat:  {self.catalog_url}",
+                            f"id:   {self.service_id}",
+                            f"tick: {tick}",
+                        ],
+                        kind="info",
+                    )
+        threading.Thread(target=_loop, daemon=True, name="catalog-heartbeat").start()
+
 
 class ControlCenterWebService(object):
     # cherrypy rest api - tanin
     exposed = True
 
     def __init__(self):
-        self.analytics_url = os.getenv("ANALYTICS_URL", "http://localhost:8083")
-        self.mqtt_broker = os.getenv("MQTT_BROKER", "localhost")
-        self.mqtt_port = int(os.getenv("MQTT_PORT", 1883))
-        self.monitoring_interval = int(os.getenv("MONITORING_INTERVAL", 30))
+        self.analytics_url = os.environ["ANALYTICS_URL"]
+        self.mqtt_broker = os.environ["MQTT_BROKER"]
+        self.mqtt_port = int(os.environ["MQTT_PORT"])
+        self.monitoring_interval = int(os.environ["MONITORING_INTERVAL"])
 
         self.decision_engine = DecisionEngine(
             analytics_url=self.analytics_url,
@@ -44,6 +96,7 @@ class ControlCenterWebService(object):
         self.monitoring_enabled = False
         self.monitoring_thread = None
         self.start_time = time.time()
+        self._tick = 0
 
         self._initialize_service()
         logger.info("control center starting...")
@@ -76,19 +129,39 @@ class ControlCenterWebService(object):
         while self.monitoring_enabled:
             try:
                 logger.debug("Running monitoring cycle")
-                
+
+                self._tick += 1
+                actions_count = 0
                 results = self.decision_engine.process_all_pipelines()
-                
+
                 for pipeline_id, pipeline_results in results.items():
                     for result in pipeline_results:
                         if result.decision.action != ActionType.NO_ACTION:
-                            logger.info(
-                                f"Action taken for {pipeline_id}/{result.bolt_id}: "
-                                f"{result.decision.action.value} - {result.decision.reason}"
+                            actions_count += 1
+                            print_banner(
+                                "DECISION",
+                                [
+                                    f"pipe:  {pipeline_id} / {result.bolt_id}",
+                                    f"act:   {result.decision.action.value}",
+                                    f"why:   {result.decision.reason}",
+                                    f"ts:    {time.strftime('%H:%M:%S')}",
+                                ],
+                                kind="event",
                             )
-                
+
+                print_banner(
+                    "CC TICK",
+                    [
+                        f"tick:  {self._tick}",
+                        f"pipes: {len(results)}",
+                        f"acts:  {actions_count}",
+                        f"int:   {self.monitoring_interval}s",
+                    ],
+                    kind="info",
+                )
+
                 time.sleep(self.monitoring_interval)
-                
+
             except Exception as e:
                 logger.error(f"Monitoring error: {e}")
                 time.sleep(self.monitoring_interval)
@@ -129,17 +202,6 @@ class ControlCenterWebService(object):
                     }
                 })
 
-            elif endpoint == "history":
-                user, error = self._require_auth("view_history")
-                if error:
-                    return error
-
-                limit = int(query.get("limit", 100))
-                return self.json_response({
-                    "history": self.decision_engine.get_history(limit),
-                    "total_decisions": len(self.decision_engine.decision_history)
-                })
-
             else:
                 cherrypy.response.status = 404
                 return self.json_response({"error": f"Endpoint '{endpoint}' not found"})
@@ -176,7 +238,22 @@ class ControlCenterWebService(object):
                     cherrypy.response.status = 400
                     return self.json_response({"error": "pipeline_id, valve_id, and action required"})
 
+                if action not in ("open", "close"):
+                    cherrypy.response.status = 400
+                    return self.json_response({"error": f"action must be 'open' or 'close', got {action!r}"})
+
                 logger.info(f"Manual control: {action} valve {valve_id} in pipeline {pipeline_id}")
+
+                print_banner(
+                    "MANUAL OVERRIDE",
+                    [
+                        f"who:   {user.get('username', '?') if user else '?'}",
+                        f"valve: {valve_id} -> {action}",
+                        f"pipe:  {pipeline_id}",
+                        f"why:   {reason}",
+                    ],
+                    kind="warning",
+                )
 
                 success = self.decision_engine.handle_manual_override(
                     pipeline_id, valve_id, action, reason
@@ -200,6 +277,14 @@ class ControlCenterWebService(object):
 
                 if action == "activate":
                     logger.warning("Emergency mode ACTIVATED")
+                    print_banner(
+                        "EMERGENCY ON",
+                        [
+                            f"by {user.get('username', '?') if user else '?'} @ {time.strftime('%H:%M:%S')}",
+                            f"cascade: closing all valves now",
+                        ],
+                        kind="danger",
+                    )
                     self.decision_engine.set_emergency_mode(True)
                     return self.json_response({
                         "message": "Emergency mode activated",
@@ -208,6 +293,13 @@ class ControlCenterWebService(object):
                 elif action == "deactivate":
                     logger.info("Emergency mode DEACTIVATED")
                     self.decision_engine.set_emergency_mode(False)
+                    print_banner(
+                        "EMERGENCY OFF",
+                        [
+                            f"by {user.get('username', '?') if user else '?'} @ {time.strftime('%H:%M:%S')}",
+                        ],
+                        kind="info",
+                    )
                     return self.json_response({
                         "message": "Emergency mode deactivated",
                         "timestamp": time.time()
@@ -232,24 +324,24 @@ class ControlCenterWebService(object):
         return self.json_response({"error": "DELETE operations not supported"})
 
 def main():
-    port = int(os.getenv("CHERRYPY_PORT", 8085))
-    host = os.getenv("CHERRYPY_HOST", "0.0.0.0")
-    
+    port = int(os.environ["CHERRYPY_PORT"])
+    host = os.environ["CHERRYPY_HOST"]
+
     cherrypy.config.update({
         'server.socket_host': host,
         'server.socket_port': port,
         'engine.autoreload.on': False
     })
-    
+
     app_config = {
         '/': {
             'request.dispatch': cherrypy.dispatch.MethodDispatcher(),
             'tools.response_headers.on': True,
             'tools.response_headers.headers': [
                 ('Content-Type', 'application/json'),
-                ('Access-Control-Allow-Origin', '*'),
-                ('Access-Control-Allow-Methods', 'GET, POST, DELETE'),
-                ('Access-Control-Allow-Headers', 'Content-Type, Authorization')
+                ('Access-Control-Allow-Origin', os.environ['CORS_ALLOW_ORIGIN']),
+                ('Access-Control-Allow-Methods', os.environ['CORS_ALLOW_METHODS']),
+                ('Access-Control-Allow-Headers', os.environ['CORS_ALLOW_HEADERS'])
             ]
         }
     }
@@ -259,16 +351,44 @@ def main():
     logger.info(f"Starting Control Center on {host}:{port}")
     logger.info("Features: Decision making, Analytics integration, Valve control")
 
-    # inja un common utils ro import kon k sakhtamesh 
-    catalog_url = os.getenv("CATALOG_URL", "http://localhost:8081")
+    # inja un common utils ro import kon k sakhtamesh
+    catalog_url = os.environ["CATALOG_URL"]
     catalog_client = CatalogClient(catalog_url)
-    catalog_client.register_service(
+    registered = catalog_client.register_service(
         name="control_center",
         host=host,
         port=port,
         health_endpoint="/health",
         description="Decision engine & automation service"
     )
+    if registered:
+        print_banner(
+            "CATALOG REGISTERED",
+            [
+                f"svc:  control_center",
+                f"addr: http://{host}:{port}",
+                f"cat:  {catalog_url}",
+                f"id:   {catalog_client.service_id}",
+            ],
+            kind="success",
+        )
+        catalog_client.start_heartbeat(
+            name="control_center",
+            host=host,
+            port=port,
+            description="Decision engine & automation service",
+            interval=int(os.environ["CATALOG_HEARTBEAT_INTERVAL"]),
+        )
+    else:
+        print_banner(
+            "CATALOG REGISTRATION FAILED",
+            [
+                f"svc:  control_center",
+                f"cat:  {catalog_url}",
+                f"why:  see logs above",
+            ],
+            kind="danger",
+        )
 
     cherrypy.quickstart(service, '/', app_config)
 

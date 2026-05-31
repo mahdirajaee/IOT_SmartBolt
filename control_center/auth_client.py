@@ -8,8 +8,8 @@ logger = logging.getLogger(__name__)
 class AuthClient:
     # auth client - validates tokens with account manager
     def __init__(self):
-        self.account_manager_url = os.getenv('ACCOUNT_MANAGER_URL', 'http://localhost:8084')
-        self.timeout = 5
+        self.account_manager_url = os.environ['ACCOUNT_MANAGER_URL']
+        self.timeout = int(os.environ['HTTP_TIMEOUT'])
         logger.info(f"AuthClient initialized with Account Manager URL: {self.account_manager_url}")
 
     def validate_token(self, token: str) -> Optional[Dict]:
@@ -59,7 +59,6 @@ class AuthClient:
             'view_status': 'view',
             'view_rules': 'view',
             'view_stats': 'view',
-            'view_history': 'view',
             'make_decision': 'control',
             'process_pipeline': 'control',
             'manual_control': 'control',

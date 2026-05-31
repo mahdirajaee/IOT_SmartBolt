@@ -9,20 +9,20 @@ logger = logging.getLogger(__name__)
 
 class DataClient:
     def __init__(self,
-                 timeseries_url='http://localhost:8082',
-                 analytics_url='http://localhost:8083',
-                 catalog_url='http://localhost:8081',
+                 timeseries_url,
+                 analytics_url,
+                 catalog_url,
                  account_manager_url=None):
         self.timeseries_url = timeseries_url
         self.analytics_url = analytics_url
         self.catalog_url = catalog_url
-        self.account_manager_url = account_manager_url or os.getenv("ACCOUNT_MANAGER_URL", "http://localhost:8084")
-        self.timeout = int(os.getenv("DATA_CLIENT_TIMEOUT", 5))
+        self.account_manager_url = account_manager_url or os.environ["ACCOUNT_MANAGER_URL"]
+        self.timeout = int(os.environ["DATA_CLIENT_TIMEOUT"])
         self.cache = {}
-        self.cache_ttl = int(os.getenv("CACHE_TTL", 60))
+        self.cache_ttl = int(os.environ["CACHE_TTL"])
 
-        self.temp_alert_threshold = float(os.getenv("TEMP_ALERT_THRESHOLD", 45.0))
-        self.pressure_alert_threshold = float(os.getenv("PRESSURE_ALERT_THRESHOLD", 120.0))
+        self.temp_alert_threshold = float(os.environ["TEMP_ALERT_THRESHOLD"])
+        self.pressure_alert_threshold = float(os.environ["PRESSURE_ALERT_THRESHOLD"])
 
     def _make_request(self, url, method='GET', params=None, json_data=None, cache_key=None):
         if cache_key and cache_key in self.cache:
@@ -139,17 +139,6 @@ class DataClient:
                 result.append(cid)
         return result
 
-    def update_user_chat_id(self, user_id, chat_id):
-        try:
-            response = requests.put(
-                f'{self.catalog_url}/users/{user_id}',
-                json={'chatID': chat_id},
-                timeout=self.timeout
-            )
-            return response.status_code == 200
-        except Exception:
-            return False
-
     def get_all_pipelines(self):
         data = self._make_request(f'{self.catalog_url}/pipelines',
                                   cache_key='all_pipelines')
@@ -158,7 +147,6 @@ class DataClient:
         return []
 
     def get_pipeline_live_summary(self, pipeline_id):
-        # shared logic used by both main.py and telegram_handler.py
         pipeline_config = self.get_pipeline_config(pipeline_id)
         if not pipeline_config or "bolts" not in pipeline_config:
             return None
