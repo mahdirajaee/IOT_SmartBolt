@@ -1,0 +1,251 @@
+name: iot-smartbolt
+
+x-svc: &svc
+  build: .
+  image: iot-smartbolt:local
+  restart: unless-stopped
+  networks: [iotnet]
+
+services:
+  mosquitto:
+    image: eclipse-mosquitto:2
+    restart: unless-stopped
+    networks: [iotnet]
+    volumes:
+      - ./mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+    healthcheck:
+      test: ["CMD", "mosquitto_sub", "-t", "$$SYS/#", "-C", "1", "-W", "3"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+
+  catalog:
+    <<: *svc
+    working_dir: /app/catalog
+    command: ["python", "-u", "main.py"]
+    env_file: [./catalog/.env]
+    environment:
+      CHERRYPY_HOST: catalog
+      ACCOUNT_MANAGER_URL: http://account_manager:8084
+      DEFAULT_MQTT_BROKER: mosquitto
+      DEFAULT_MQTT_PORT: "1883"
+      DEFAULT_TIMESERIES_DB_URL: http://timeseries:8082
+      TIMESERIES_SERVICE_IP: timeseries:8082
+    depends_on:
+      mosquitto: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://catalog:8081/health', timeout=3)"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 15s
+
+  account_manager:
+    <<: *svc
+    working_dir: /app/account_manager
+    command: ["python", "-u", "main.py"]
+    env_file: [./account_manager/.env]
+    environment:
+      CHERRYPY_HOST: account_manager
+      CATALOG_URL: http://catalog:8081
+      DB_PATH: /data/users.db
+    volumes:
+      - iot_data:/data
+    depends_on:
+      catalog: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://account_manager:8084/health', timeout=3)"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 15s
+
+  analytics:
+    <<: *svc
+    working_dir: /app/analytics
+    command: ["python", "-u", "main.py"]
+    env_file: [./analytics/.env]
+    environment:
+      CHERRYPY_HOST: analytics
+      SERVICE_HOST: analytics
+      CATALOG_URL: http://catalog:8081
+      ACCOUNT_MANAGER_URL: http://account_manager:8084
+      TIMESERIES_DB_URL: http://timeseries:8082
+      MQTT_BROKER: mosquitto
+      MQTT_PORT: "1883"
+    depends_on:
+      catalog: { condition: service_healthy }
+      mosquitto: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://analytics:8083/health', timeout=3)"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 15s
+
+  control_center:
+    <<: *svc
+    working_dir: /app/control_center
+    command: ["python", "-u", "main.py"]
+    env_file: [./control_center/.env]
+    environment:
+      CHERRYPY_HOST: control_center
+      CATALOG_URL: http://catalog:8081
+      ANALYTICS_URL: http://analytics:8083
+      ACCOUNT_MANAGER_URL: http://account_manager:8084
+      MQTT_BROKER: mosquitto
+      MQTT_PORT: "1883"
+    depends_on:
+      catalog: { condition: service_healthy }
+      mosquitto: { condition: service_healthy }
+      analytics: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://control_center:8085/health', timeout=3)"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 15s
+
+  timeseries:
+    <<: *svc
+    working_dir: /app/timeSeriesDbConnector
+    command: ["python", "-u", "main.py"]
+    env_file: [./timeSeriesDbConnector/.env]
+    environment:
+      CHERRYPY_HOST: timeseries
+      SERVICE_HOST: timeseries
+      CATALOG_URL: http://catalog:8081
+      MQTT_BROKER: mosquitto
+      MQTT_PORT: "1883"
+    depends_on:
+      catalog: { condition: service_healthy }
+      mosquitto: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://timeseries:8082/health', timeout=3)"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 20s
+
+  message_broker:
+    <<: *svc
+    working_dir: /app/message_broker
+    command: ["python", "-u", "main.py"]
+    env_file: [./message_broker/.env]
+    environment:
+      CHERRYPY_HOST: message_broker
+      CATALOG_URL: http://catalog:8081
+      MQTT_BROKER: mosquitto
+      MQTT_PORT: "1883"
+    depends_on:
+      catalog: { condition: service_healthy }
+      mosquitto: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://message_broker:8089/health', timeout=3)"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 15s
+
+  raspberry-pi-north:
+    <<: *svc
+    working_dir: /app/raspberry-pi-north
+    command: ["python", "-u", "main.py"]
+    env_file: [./raspberry-pi-north/.env]
+    environment:
+      CHERRYPY_HOST: raspberry-pi-north
+      SERVICE_PORT: "8086"
+      CATALOG_URL: http://catalog:8081
+      MQTT_BROKER: mosquitto
+      MQTT_PORT: "1883"
+    depends_on:
+      catalog: { condition: service_healthy }
+      mosquitto: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://raspberry-pi-north:8086/health', timeout=3)"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 15s
+
+  raspberry-pi-south:
+    <<: *svc
+    working_dir: /app/raspberry-pi-south
+    command: ["python", "-u", "main.py"]
+    env_file: [./raspberry-pi-south/.env]
+    environment:
+      CHERRYPY_HOST: raspberry-pi-south
+      SERVICE_PORT: "8088"
+      CATALOG_URL: http://catalog:8081
+      MQTT_BROKER: mosquitto
+      MQTT_PORT: "1883"
+    depends_on:
+      catalog: { condition: service_healthy }
+      mosquitto: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://raspberry-pi-south:8088/health', timeout=3)"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 15s
+
+  telegram_bot:
+    <<: *svc
+    working_dir: /app/telegram_bot
+    command: ["python", "-u", "main.py"]
+    env_file: [./telegram_bot/.env]
+    environment:
+      CHERRYPY_HOST: telegram_bot
+      CATALOG_URL: http://catalog:8081
+      ACCOUNT_MANAGER_URL: http://account_manager:8084
+      ANALYTICS_URL: http://analytics:8083
+      TIMESERIES_DB_URL: http://timeseries:8082
+      MQTT_BROKER: mosquitto
+      MQTT_PORT: "1883"
+    depends_on:
+      catalog: { condition: service_healthy }
+      account_manager: { condition: service_healthy }
+      mosquitto: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://telegram_bot:8087/health', timeout=3)"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 15s
+
+  web_dashboard:
+    <<: *svc
+    working_dir: /app/web_dashboard
+    command: ["python", "-u", "app.py"]
+    environment:
+      DASH_HOST: 0.0.0.0
+      DASH_PORT: "8090"
+      DEBUG: "false"
+      SECRET_KEY: ${SECRET_KEY:-iot-smartbolt-dashboard-secret}
+      CATALOG_URL: http://catalog:8081
+      ACCOUNT_MANAGER_URL: http://account_manager:8084
+      ANALYTICS_URL: http://analytics:8083
+      CONTROL_CENTER_URL: http://control_center:8085
+      TIMESERIES_DB_URL: http://timeseries:8082
+    ports:
+      - "8090:8090"
+    depends_on:
+      catalog: { condition: service_healthy }
+      account_manager: { condition: service_healthy }
+      analytics: { condition: service_healthy }
+      control_center: { condition: service_healthy }
+      timeseries: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8090/health', timeout=3)"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 20s
+
+networks:
+  iotnet:
+    driver: bridge
+
+volumes:
+  iot_data:

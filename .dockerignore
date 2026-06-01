@@ -1,0 +1,39 @@
+# version control and tooling
+.git
+.gitignore
+.dockerignore
+Dockerfile
+docker-compose.yml
+mosquitto
+
+# virtual envs and caches
+.venv
+venv
+env
+__pycache__
+**/__pycache__
+*.pyc
+*.pyo
+
+# secrets and runtime state must never enter the image
+**/.env*
+.env*
+.internal_api_key
+*.db
+*.db-shm
+*.db-wal
+**/*.db
+**/*.db-shm
+**/*.db-wal
+raspberry-pi-*/data
+
+# local noise and docs
+*.log
+.DS_Store
+**/.DS_Store
+*.pdf
+*.pptx
+*.bat
+stop_all
+LICENSE
+*.md

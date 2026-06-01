@@ -9,6 +9,7 @@ build/
 .venv/
 venv/
 env/
+/.env
 
 .DS_Store
 .AppleDouble
