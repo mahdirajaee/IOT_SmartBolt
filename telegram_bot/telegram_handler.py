@@ -391,7 +391,7 @@ class TelegramBotHandler:
         
         await update.message.reply_text(
             f"**EMERGENCY SHUTDOWN**\n\n"
-            f"This will close ALL valves on pipeline {pipeline_id}.\n"
+            f"This will open (vent) ALL valves on pipeline {pipeline_id} to relieve pressure.\n"
             f"Are you sure?",
             parse_mode='Markdown',
             reply_markup=reply_markup
@@ -545,15 +545,15 @@ class TelegramBotHandler:
                     valve_ids = [v["id"] for v in pipeline_config["valves"]]
                     for valve_id in valve_ids:
                         self.mqtt_client.send_valve_command(
-                            pipeline_id, valve_id, "close", user.username
+                            pipeline_id, valve_id, "open", user.username
                         )
                 else:
                     logger.warning(f"No valves found for pipeline {pipeline_id}")
                     valve_ids = []
-                
+
                 await query.edit_message_text(
                     f"EMERGENCY SHUTDOWN EXECUTED\n"
-                    f"All valves on pipeline {pipeline_id} closed."
+                    f"All valves on pipeline {pipeline_id} opened to vent pressure."
                 )
                 logger.warning(f"Emergency shutdown by {user.username} for pipeline {pipeline_id}")
                 
