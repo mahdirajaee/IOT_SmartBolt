@@ -20,5 +20,4 @@ env/
 *.swo
 *~
 *.log
-.internal_api_key
 raspberry-pi-*/data/

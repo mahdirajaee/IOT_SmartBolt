@@ -8,3 +8,5 @@ dash
 dash-bootstrap-components
 plotly
 pandas
+PyJWT
+bcrypt
