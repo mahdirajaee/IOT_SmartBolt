@@ -75,3 +75,22 @@ class AuthManager:
             logger.error(f"Token verification error: {e}")
             return False
 
+    def logout(self, token: str) -> bool:
+        try:
+            headers = {'Authorization': f'Bearer {token}'}
+            response = requests.post(
+                f"{self.account_manager_url}/logout",
+                headers=headers,
+                timeout=5
+            )
+            if response.status_code == 200:
+                return True
+            logger.warning(f"Logout returned status {response.status_code}")
+            return False
+        except requests.exceptions.ConnectionError:
+            logger.warning("Logout could not reach Account Manager; clearing client session only")
+            return False
+        except Exception as e:
+            logger.error(f"Logout error: {e}")
+            return False
+

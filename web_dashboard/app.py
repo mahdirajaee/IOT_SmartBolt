@@ -218,6 +218,11 @@ def handle_login(n_clicks, username, password):
 def handle_logout(n_clicks, auth_data):
     if n_clicks and auth_data:
         username = auth_data.get('user', {}).get('username', 'Unknown')
+        token = auth_data.get('token')
+        if token:
+            revoked = auth_manager.logout(token)
+            if not revoked:
+                logger.warning(f"Server-side session revocation failed for {username}; clearing client token anyway")
         logger.info(f"User {username} logged out")
         return None
     raise PreventUpdate
