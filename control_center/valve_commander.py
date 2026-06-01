@@ -207,19 +207,19 @@ class ValveCommander:
         )
         return self.send_command(command)
 
-    def emergency_closure(self, pipeline_id: str, valve_ids: List[str], reason: str, sector_id: Optional[str] = None) -> Dict[str, bool]:
+    def emergency_vent(self, pipeline_id: str, valve_ids: List[str], reason: str, sector_id: Optional[str] = None) -> Dict[str, bool]:
         results = {}
         for valve_id in valve_ids:
             command = ValveCommand(
                 pipeline_id=pipeline_id,
                 valve_id=valve_id,
-                command=CommandType.CLOSE,
+                command=CommandType.OPEN,
                 sector_id=sector_id,
-                reason=f"EMERGENCY: {reason}",
+                reason=f"EMERGENCY VENT: {reason}",
                 priority=CommandPriority.EMERGENCY
             )
             results[valve_id] = self.send_command(command)
 
-        logger.warning(f"Emergency closure executed for {len(valve_ids)} valves on pipeline {pipeline_id}")
+        logger.warning(f"Emergency vent executed for {len(valve_ids)} valves on pipeline {pipeline_id}")
         return results
 

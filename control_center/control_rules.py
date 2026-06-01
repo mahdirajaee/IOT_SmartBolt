@@ -11,7 +11,7 @@ class ActionType(Enum):
     OPEN_VALVE = "open_valve"
     CLOSE_VALVE = "close_valve"
     ALERT_OPERATOR = "alert_operator"
-    EMERGENCY_SHUTDOWN = "emergency_shutdown"
+    EMERGENCY_VENT = "emergency_vent"
 
 class RuleType(Enum):
     THRESHOLD = "threshold"
@@ -61,7 +61,7 @@ class ControlRules:
                 description="Open valve to release high pressure (gas pipeline safety)"
             ),
 
-            # high temp - close valve (fire hazard)
+            # high temp -> open valve to vent the over-heated section (relieve heat)
             ControlRule(
                 name="high_temperature_hazard",
                 rule_type=RuleType.ANOMALY,
@@ -94,11 +94,11 @@ class ControlRules:
     def evaluate_rules(self, analytics_data: Dict[str, Any]) -> ControlDecision:
         if self.emergency_mode:
             return ControlDecision(
-                action=ActionType.EMERGENCY_SHUTDOWN,
+                action=ActionType.EMERGENCY_VENT,
                 valves=self._get_affected_valves(analytics_data),
-                reason="Emergency mode active",
+                reason="Emergency mode active - venting all valves",
                 confidence=1.0,
-                rule_name="emergency_override",
+                rule_name="emergency_vent_override",
                 priority=999
             )
 

@@ -281,7 +281,7 @@ class ControlCenterWebService(object):
                         "EMERGENCY ON",
                         [
                             f"by {user.get('username', '?') if user else '?'} @ {time.strftime('%H:%M:%S')}",
-                            f"cascade: closing all valves now",
+                            "cascade: venting — opening all valves now",
                         ],
                         kind="danger",
                     )

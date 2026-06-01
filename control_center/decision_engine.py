@@ -120,11 +120,11 @@ class DecisionEngine:
                 )
                 commands_sent[valve_id] = success
         
-        elif decision.action == ActionType.EMERGENCY_SHUTDOWN:
-            commands_sent = self.valve_commander.emergency_closure(
+        elif decision.action == ActionType.EMERGENCY_VENT:
+            commands_sent = self.valve_commander.emergency_vent(
                 pipeline_id, decision.valves, decision.reason
             )
-            logger.critical(f"EMERGENCY SHUTDOWN: {decision.reason}")
+            logger.critical(f"EMERGENCY VENT: {decision.reason}")
         
         return commands_sent
     
