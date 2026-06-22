@@ -1,0 +1,28 @@
+# Local override: publish the microservice + MQTT ports to the host so the
+# native iOS/macOS apps (running on the Mac / Simulator) can reach them at
+# localhost in "live" backend mode. The committed docker-compose.yml only
+# exposes the web_dashboard (8090). Delete this file to revert.
+services:
+  mosquitto:
+    ports:
+      - "1883:1883"
+
+  catalog:
+    ports:
+      - "8081:8081"
+
+  timeseries:
+    ports:
+      - "8082:8082"
+
+  analytics:
+    ports:
+      - "8083:8083"
+
+  account_manager:
+    ports:
+      - "8084:8084"
+
+  control_center:
+    ports:
+      - "8085:8085"

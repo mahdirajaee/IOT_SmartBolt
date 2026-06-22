@@ -9,7 +9,15 @@ build/
 .venv/
 venv/
 env/
-/.env
+.env
+**/.env
+.internal_api_key
+users.db
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite3
 
 .DS_Store
 .AppleDouble
@@ -17,6 +25,7 @@ env/
 
 .vscode/
 .idea/
+iotlect
 *.swp
 *.swo
 *~

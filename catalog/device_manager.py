@@ -33,7 +33,7 @@ class DeviceManager:
         self._save_lock = threading.RLock()
         self._load_catalog()
 
-    def _load_catalog(self):
+    def _load_catalog(self):#restore the catalog's state
         if os.path.exists(self.data_file):
             try:
                 with open(self.data_file, 'r') as f:
@@ -46,7 +46,7 @@ class DeviceManager:
             logger.info(f"No existing catalog found at {self.data_file}")
 
     @staticmethod
-    def _unique_ids(items):
+    def _unique_ids(items):# helper func that wouldnt allow duplicate ids in the catalog
         seen = set()
         ordered = []
         for item in items:
@@ -77,7 +77,7 @@ class DeviceManager:
             logger.warning(f"Failed to derive sector owner from account_manager: {e}")
         return "", ""
 
-    def _build_devices_from_catalog(self):
+    def _build_devices_from_catalog(self):# build the json entries in the catalog.json
         self.devices = {"pipelines": {}, "bolts": {}, "valves": {}}
 
         for sector in self.catalog.get("sectorsList", []):
@@ -233,7 +233,7 @@ class DeviceManager:
         self.catalog["sectorsList"] = new_sectors
         self.catalog.pop("devicesList", None)
 
-    def _save_catalog(self):
+    def _save_catalog(self):#Writes the catalog to disk safely
         with self._save_lock:
             tmp_path = None
             try:
@@ -267,7 +267,7 @@ class DeviceManager:
                     except OSError:
                         pass
 
-    def update_service_in_catalog(self, service_id, rest_endpoint, mqtt_topic=None):
+    def update_service_in_catalog(self, service_id, rest_endpoint, mqtt_topic=None):#Adds or updates a service entry in the catalog's servicesList
         for service in self.catalog.get("servicesList", []):
             if service.get("serviceID") == service_id:
                 service["REST_endpoint"] = rest_endpoint
@@ -325,7 +325,7 @@ class DeviceManager:
         self._save_catalog()
         return pipeline_id
 
-    def register_bolt(self, bolt_id, pipeline_id, type="temperature_pressure", location=""):
+    def register_bolt(self, bolt_id, pipeline_id, type="temperature_pressure", location=""):#Adds a new pipeline to memory and saves
         if pipeline_id not in self.devices["pipelines"]:
             self.register_pipeline(pipeline_id)
 
